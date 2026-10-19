@@ -387,7 +387,7 @@ mod tests {
         let p = d.path();
         let clean = provenance(p, None, true);
         assert_eq!(clean["dirty"], false);
-        std::fs::write(p.join("a.txt"), "two\n").unwrap();
+        std::fs::write(p.join("a.txt"), "two, longer\n").unwrap();
         std::fs::write(p.join("new.txt"), "n\n").unwrap();
         // Tracked scope: sees the change to a.txt, not the untracked file; touches nothing.
         let t = provenance(p, None, false);
