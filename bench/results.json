@@ -1,170 +1,352 @@
 {
  "model": "openai/qwen3.8-flash-next-uncensored-lean",
  "base_url": "http://127.0.0.1:8080/v1",
- "tasks": [
-  "calc",
-  "duration",
-  "intervals",
-  "lru",
-  "semver",
-  "wrap"
- ],
- "date": "2026-10-19",
  "temperature": 0.2,
- "A": {
-  "arm": "A single agent loop",
-  "points": 6,
-  "tasks": 6,
-  "per_task": {
-   "calc": true,
-   "duration": true,
-   "intervals": true,
-   "lru": true,
-   "semver": true,
-   "wrap": true
-  },
-  "turns": 19,
-  "shell_runs": 8,
-  "wall_s": 354.4,
-  "prompt_tokens": 118114,
-  "completion_tokens": 14521,
-  "tokens": 132635,
-  "declared_done": true,
-  "claimed_done_but_failed": false,
-  "failed_when_claimed_done": 0,
-  "log": [
-   {
-    "turn": 1,
-    "wrote_files": false,
-    "runs": 0,
-    "tokens_out": 5584
+ "max_tokens": 6000,
+ "sets": {
+  "easy": {
+   "tasks": [
+    "calc",
+    "duration",
+    "intervals",
+    "lru",
+    "semver",
+    "wrap"
+   ],
+   "A": {
+    "arm": "A single agent loop",
+    "points": 6,
+    "tasks": 6,
+    "per_task": {
+     "calc": true,
+     "duration": true,
+     "intervals": true,
+     "lru": true,
+     "semver": true,
+     "wrap": true
+    },
+    "turns": 19,
+    "shell_runs": 8,
+    "wall_s": 354.4,
+    "prompt_tokens": 118114,
+    "completion_tokens": 14521,
+    "tokens": 132635,
+    "declared_done": true,
+    "claimed_done_but_failed": false,
+    "failed_when_claimed_done": 0,
+    "log": [
+     {
+      "turn": 1,
+      "wrote_files": false,
+      "runs": 0,
+      "tokens_out": 5584
+     },
+     {
+      "turn": 2,
+      "wrote_files": false,
+      "runs": 0,
+      "tokens_out": 1005
+     },
+     {
+      "turn": 3,
+      "wrote_files": true,
+      "runs": 0,
+      "tokens_out": 805
+     },
+     {
+      "turn": 4,
+      "wrote_files": false,
+      "runs": 1,
+      "tokens_out": 198
+     },
+     {
+      "turn": 5,
+      "wrote_files": true,
+      "runs": 0,
+      "tokens_out": 836
+     },
+     {
+      "turn": 6,
+      "wrote_files": false,
+      "runs": 1,
+      "tokens_out": 861
+     },
+     {
+      "turn": 7,
+      "wrote_files": true,
+      "runs": 0,
+      "tokens_out": 274
+     },
+     {
+      "turn": 8,
+      "wrote_files": false,
+      "runs": 0,
+      "tokens_out": 78
+     },
+     {
+      "turn": 9,
+      "wrote_files": false,
+      "runs": 1,
+      "tokens_out": 122
+     },
+     {
+      "turn": 10,
+      "wrote_files": false,
+      "runs": 0,
+      "tokens_out": 61
+     },
+     {
+      "turn": 11,
+      "wrote_files": false,
+      "runs": 0,
+      "tokens_out": 59
+     },
+     {
+      "turn": 12,
+      "wrote_files": false,
+      "runs": 1,
+      "tokens_out": 96
+     },
+     {
+      "turn": 13,
+      "wrote_files": true,
+      "runs": 0,
+      "tokens_out": 379
+     },
+     {
+      "turn": 14,
+      "wrote_files": false,
+      "runs": 1,
+      "tokens_out": 148
+     },
+     {
+      "turn": 15,
+      "wrote_files": true,
+      "runs": 0,
+      "tokens_out": 766
+     },
+     {
+      "turn": 16,
+      "wrote_files": false,
+      "runs": 1,
+      "tokens_out": 157
+     },
+     {
+      "turn": 17,
+      "wrote_files": false,
+      "runs": 1,
+      "tokens_out": 2978
+     },
+     {
+      "turn": 18,
+      "wrote_files": false,
+      "runs": 1,
+      "tokens_out": 90
+     },
+     {
+      "turn": 19,
+      "wrote_files": false,
+      "runs": 0,
+      "tokens_out": 24
+     }
+    ],
+    "verified_per_min": 1.016,
+    "verified_per_100k_tokens": 4.52,
+    "date": "v0.1 run, 2026-10-19",
+    "max_turns": 20
    },
-   {
-    "turn": 2,
-    "wrote_files": false,
-    "runs": 0,
-    "tokens_out": 1005
+   "B_v01": {
+    "arm": "B UnumPingPong tables",
+    "points": 6,
+    "tasks": 6,
+    "per_task": {
+     "calc": true,
+     "duration": true,
+     "intervals": true,
+     "lru": true,
+     "semver": true,
+     "wrap": true
+    },
+    "rallies": 6,
+    "wall_s": 579.5,
+    "prompt_tokens": 3422,
+    "completion_tokens": 25391,
+    "tokens": 28813,
+    "verified_per_min": 0.621,
+    "verified_per_100k_tokens": 20.82,
+    "date": "v0.1 run, 2026-10-19"
    },
-   {
-    "turn": 3,
-    "wrote_files": true,
-    "runs": 0,
-    "tokens_out": 805
-   },
-   {
-    "turn": 4,
-    "wrote_files": false,
-    "runs": 1,
-    "tokens_out": 198
-   },
-   {
-    "turn": 5,
-    "wrote_files": true,
-    "runs": 0,
-    "tokens_out": 836
-   },
-   {
-    "turn": 6,
-    "wrote_files": false,
-    "runs": 1,
-    "tokens_out": 861
-   },
-   {
-    "turn": 7,
-    "wrote_files": true,
-    "runs": 0,
-    "tokens_out": 274
-   },
-   {
-    "turn": 8,
-    "wrote_files": false,
-    "runs": 0,
-    "tokens_out": 78
-   },
-   {
-    "turn": 9,
-    "wrote_files": false,
-    "runs": 1,
-    "tokens_out": 122
-   },
-   {
-    "turn": 10,
-    "wrote_files": false,
-    "runs": 0,
-    "tokens_out": 61
-   },
-   {
-    "turn": 11,
-    "wrote_files": false,
-    "runs": 0,
-    "tokens_out": 59
-   },
-   {
-    "turn": 12,
-    "wrote_files": false,
-    "runs": 1,
-    "tokens_out": 96
-   },
-   {
-    "turn": 13,
-    "wrote_files": true,
-    "runs": 0,
-    "tokens_out": 379
-   },
-   {
-    "turn": 14,
-    "wrote_files": false,
-    "runs": 1,
-    "tokens_out": 148
-   },
-   {
-    "turn": 15,
-    "wrote_files": true,
-    "runs": 0,
-    "tokens_out": 766
-   },
-   {
-    "turn": 16,
-    "wrote_files": false,
-    "runs": 1,
-    "tokens_out": 157
-   },
-   {
-    "turn": 17,
-    "wrote_files": false,
-    "runs": 1,
-    "tokens_out": 2978
-   },
-   {
-    "turn": 18,
-    "wrote_files": false,
-    "runs": 1,
-    "tokens_out": 90
-   },
-   {
-    "turn": 19,
-    "wrote_files": false,
-    "runs": 0,
-    "tokens_out": 24
+   "B": {
+    "arm": "B UnumPingPong tables",
+    "points": 6,
+    "per_task": {
+     "calc": true,
+     "duration": true,
+     "intervals": true,
+     "lru": true,
+     "semver": true,
+     "wrap": true
+    },
+    "rallies": 6,
+    "faults": 0,
+    "wall_s": 675.2,
+    "effort": [
+     "low",
+     "medium",
+     "high"
+    ],
+    "parallel": "auto",
+    "parallel_used": "3",
+    "prompt_tokens": 3848,
+    "completion_tokens": 14337,
+    "player_tokens": 18185,
+    "orchestrator_tokens": 0,
+    "tokens": 18185,
+    "cards_from_block": 6,
+    "rally_cards": 6,
+    "player_claimed_done_referee_failed": 0,
+    "per_table": {
+     "intervals": {
+      "rallies": 1,
+      "completion_tokens": [
+       1154
+      ]
+     },
+     "duration": {
+      "rallies": 1,
+      "completion_tokens": [
+       2075
+      ]
+     },
+     "lru": {
+      "rallies": 1,
+      "completion_tokens": [
+       1119
+      ]
+     },
+     "calc": {
+      "rallies": 1,
+      "completion_tokens": [
+       4190
+      ]
+     },
+     "wrap": {
+      "rallies": 1,
+      "completion_tokens": [
+       2389
+      ]
+     },
+     "semver": {
+      "rallies": 1,
+      "completion_tokens": [
+       3410
+      ]
+     }
+    },
+    "upp_stderr_tail": "upp: --parallel auto -> 3 (http://127.0.0.1:8080: 3 slots)\n",
+    "verified_per_min": 0.533,
+    "verified_per_100k_tokens": 32.99,
+    "tasks": 6,
+    "date": "2026-10-19",
+    "endpoint_at_start": {
+     "in_flight": 2,
+     "queued": 0,
+     "slots": 3,
+     "busy": false
+    },
+    "block_cards_claiming_done": 6,
+    "rallies_at_max_tokens": 0
    }
-  ]
- },
- "B": {
-  "arm": "B UnumPingPong tables",
-  "points": 6,
-  "tasks": 6,
-  "per_task": {
-   "calc": true,
-   "duration": true,
-   "intervals": true,
-   "lru": true,
-   "semver": true,
-   "wrap": true
   },
-  "rallies": 6,
-  "wall_s": 579.5,
-  "prompt_tokens": 3422,
-  "completion_tokens": 25391,
-  "tokens": 28813
- }
+  "hard": {
+   "tasks": [
+    "bankround",
+    "csvline",
+    "glob",
+    "isoweek",
+    "jsonptr",
+    "moneysplit",
+    "roman",
+    "topo"
+   ],
+   "B": {
+    "arm": "B UnumPingPong tables",
+    "points": 1,
+    "per_task": {
+     "bankround": false,
+     "csvline": false,
+     "glob": true,
+     "isoweek": false,
+     "jsonptr": false,
+     "moneysplit": false,
+     "roman": false,
+     "topo": false
+    },
+    "rallies": 12,
+    "faults": 3,
+    "wall_s": 1475.9,
+    "effort": [
+     "low",
+     "medium",
+     "high"
+    ],
+    "parallel": "auto",
+    "parallel_used": "3",
+    "prompt_tokens": 17725,
+    "completion_tokens": 38267,
+    "player_tokens": 55992,
+    "orchestrator_tokens": 0,
+    "tokens": 55992,
+    "cards_from_block": 6,
+    "rally_cards": 9,
+    "player_claimed_done_referee_failed": 5,
+    "per_table": {
+     "bankround": {
+      "rallies": 4,
+      "completion_tokens": [
+       6000,
+       861,
+       6000,
+       0
+      ]
+     },
+     "csvline": {
+      "rallies": 3,
+      "completion_tokens": [
+       5903,
+       6000,
+       0
+      ]
+     },
+     "glob": {
+      "rallies": 3,
+      "completion_tokens": [
+       6000,
+       1086,
+       3061
+      ]
+     },
+     "isoweek": {
+      "rallies": 2,
+      "completion_tokens": [
+       3356,
+       0
+      ]
+     }
+    },
+    "upp_stderr_tail": "upp: --parallel auto -> 3 (http://127.0.0.1:8080: 3 slots)\n",
+    "verified_per_min": 0.041,
+    "verified_per_100k_tokens": 1.79,
+    "tasks": 8,
+    "date": "2026-10-19",
+    "endpoint_at_start": {
+     "error": "timed out"
+    },
+    "block_cards_claiming_done": 6,
+    "rallies_at_max_tokens": 4,
+    "note": "Capped: the remaining tables were stopped at 25 min (model-time budget on a shared endpoint); 3 faults are those cancelled calls; 4 tables never started."
+   }
+  }
+ },
+ "notes_md": "## Why B was slower in v0.1 (580 s vs 354 s), and what changed\n\nMeasured on the endpoint (one model, Halogen 0.17.5, 3 admission slots), 2026-10-19:\n\n| Probe | Result |\n| --- | --- |\n| 1 stream, `reasoning_effort = none`, 400-token list | 48.4 tok/s |\n| 3 concurrent streams, same request | 55.7 tok/s in total (18.6 each): **1.15x**, not 3x |\n| v0.1 B, completion tokens per ball (6 balls, server default effort `xhigh`) | 1.5k-5.8k; 4 of 6 balls ran to 5.3-5.8k of the 6k budget |\n| v0.1 A, completion tokens | 14.5k in total: one long think (5.6k) in turn 1 covered all six tasks |\n| Per-rally engine overhead (referee run, store writes, scheduling) | under 1 s per rally, against 100-500 s model calls |\n\nSo the gap was **not** the parallel cap and not per-rally overhead. The endpoint's three slots\nare admission, not throughput: three streams decode about as fast as one in total. Wall time is\ntherefore about *total completion tokens / the endpoint's aggregate decode rate*, and v0.1's\nfresh-context balls each did a long `xhigh` think (25.4k completion tokens against A's 14.5k).\n\nChanges in v0.2:\n\n- **Effort hints per rally** (`effort = [\"low\", \"medium\", \"high\"]`): a cheap first try, more\n  thinking only after the referee returned the ball. On the easy set this cut B's completion\n  tokens from 25.4k to 14.3k (-44%) at the same 6/6.\n- **`--parallel auto`** probes the slot count (3 here), and now also leaves the requests the\n  endpoint is already serving to that traffic (it did not in the run below: B took all 3 slots\n  while the owner's own traffic was running, which queued their requests).\n- No change can make three streams faster than the endpoint's aggregate decode rate; on this\n  endpoint parallel tables mainly help when players are slow tools (CLIs, tests), not decode.\n\n## Caveats (read before quoting numbers)\n\n- **Shared, loaded endpoint.** The v0.2 runs (easy B, hard B) ran while 2-3 other streams were\n  in flight on the same endpoint (`in_flight` 2-3, sometimes 3 queued), so their wall times are\n  much longer than the v0.1 runs (which had a quieter endpoint) and are **not comparable** to\n  them. Token counts and verified tasks per token are comparable; wall times only within a run.\n- **Model-time budget.** The whole v0.2 benchmark was capped at about 40 minutes of model time\n  on a shared endpoint. Easy A was not re-run (the v0.1 measurement is shown). Hard B was stopped\n  after 25 minutes with 1 of 8 verified (4 tables never started), and **hard A was not run**, so\n  there is no A vs B comparison on the hard set yet. Arm C (tables + a persistent orchestrator\n  on the same model) is implemented and tested with scripted players, but was not run live for\n  the same reason.\n- **What the hard set already shows.** The referee matters there: in the player's own result\n  cards it claimed `done: yes` 6 times and the referee rejected 5 of those (syntax errors from\n  answers cut off at the token budget, a carry bug in banker's rounding, glob set edge cases, an\n  ISO-week boundary). In 4 of 12 rallies the model used the entire 6,000-token budget, mostly on\n  reasoning, even at `low` effort on rally 1, so the code was truncated: this hard set needs a\n  larger `max_tokens` (or `effort = \"none\"` first) on this model.\n- One run per arm, temperature 0.2. Treat everything as indicative.\n- Reproduce: `cargo build --release`, then\n  `python3 bench/bench.py --base-url URL --model NAME --set easy|hard --arm a,b,c`\n  (results merge into bench/results.json), and `python3 bench/card.py` for the result card."
 }

@@ -1,0 +1,31 @@
+# Model-free demo of a persistent orchestrator: a scripted orchestrator reads the result
+# card of every table as it arrives and answers it at once (return with a correction, accept,
+# chain the next ball). Swap its player for a real model (or drive the same loop from Claude
+# Code with cards_wait / card_answer) and nothing else changes.
+#
+#   upp --db /tmp/upp-orch.db run examples/demo/orchestrated.toml --watch
+#   upp --db /tmp/upp-orch.db cards --since 0     # what the orchestrator read
+
+[orchestrator]
+player = { kind = "shell", command = ["sh", "../../tests/fake-agents/fake-orchestrator.sh"], env = { ORCH_NOTE = "the referee wants exactly 42", ORCH_CHAIN_FROM = "plan", ORCH_NEXT = "Now write the release notes." } }
+
+[defaults]
+lease = { wall_secs = 120, max_rallies = 4 }
+
+[[table]]
+name = "fix"
+ball = "Write the answer to work/orch/fix.txt."
+player = { kind = "shell", command = ["sh", "../../tests/fake-agents/fake-coder.sh"], env = { FAKE_FILE = "work/orch/fix.txt", FAKE_PASS_ON = "2", FAKE_SLEEP = "1", FAKE_CARD = "1" } }
+referee = [{ kind = "command", name = "is 42", run = "grep -qx 42 work/orch/fix.txt" }]
+
+[[table]]
+name = "slow"
+ball = "Write the answer to work/orch/slow.txt."
+player = { kind = "shell", command = ["sh", "../../tests/fake-agents/fake-coder.sh"], env = { FAKE_FILE = "work/orch/slow.txt", FAKE_PASS_ON = "1", FAKE_SLEEP = "4", FAKE_CARD = "1" } }
+referee = [{ kind = "command", name = "is 42", run = "grep -qx 42 work/orch/slow.txt" }]
+
+[[table]]
+name = "plan"
+ball = "Plan the release."
+player = { kind = "shell", command = ["sh", "../../tests/fake-agents/echo-agent.sh"], env = { FAKE_SLEEP = "1" } }
+referee = [{ kind = "command", name = "plan exists", run = "true" }]

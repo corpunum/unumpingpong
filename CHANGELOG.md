@@ -1,5 +1,64 @@
 # Changelog
 
+## v0.2.0 (2026-10-19) - Cards and a persistent orchestrator
+
+The model to copy is the session that worked: one long-lived orchestrator reading compact
+results from many workers and answering each at once. v0.2 makes that the mechanism.
+
+- **Result cards.** Every rally is condensed to a card: `done` (the player's claim),
+  `summary`, `evidence`, `open_issues`, `artifacts`, tokens, elapsed time, the referee verdict
+  with an 800-byte output tail, provenance, sub-table results. The player is asked for a
+  `<card>` tail block; a deterministic extractor covers answers without one. Cards are stored
+  next to the full transcript (new `cards` table; a `final` card closes each table).
+  `table_status`, pending balls, the model server and every orchestrator get cards by default;
+  `transcript` (MCP tool, `upp transcript`, `GET /api/tables/{id}/transcript`) fetches the full
+  text on demand, including the rally waiting for its server. Per-table token split:
+  `player_tokens` vs `orchestrator_tokens` (a model server's or orchestrator's reported usage;
+  for an external server an estimate of what it read and wrote).
+- **Persistent orchestrator.** `[orchestrator] player = {...}` (any adapter) serves every card of
+  a run as it arrives: accept, return with a correction, chain `next`, `open` a table, or stop,
+  in batches, never blocking on one table. It falls back to the referee's default when it
+  fails or skips a card, refreshes its session every 40 cards, and caps new tables (50).
+  `upp orchestrate` runs one across runs. MCP `cards_wait` (block until any card in scope needs
+  an answer; cursor for the stream) + `card_answer` (with `next` / `open`) let a Claude Code
+  session be that orchestrator; the recipe is in docs/integrations/claude-code.md.
+- **Event-driven waits.** A condition variable wakes waiters in one process at once; other
+  processes' writes are seen through SQLite `data_version` within 0.4 s. The scheduler, external
+  server waits, `table_wait`, `cards_wait` and the orchestrator no longer poll queries.
+- **Nested tables.** A player opens sub-tables with its table as `parent` (MCP `table_create`
+  `parent`, `upp create --parent`, `POST /api/tables?parent=`). Players get `UPP_TABLE`,
+  `UPP_RALLY`, `UPP_RUN`, `UPP_DEPTH`, `UPP_DB`. Sub-tables inherit player and cwd, need their
+  own referee; the parent's rally waits for them without holding a parallel slot; their final
+  cards appear in the parent's card. Depth cap `max_depth` (default 3). Stopping a table stops
+  its sub-tables.
+- **Worktrees and integration.** `worktree = { repo, base, branch, path }` runs a table in its own
+  git worktree and branch. A point commits exactly the verified tree on that branch.
+  `upp integrate` / MCP `integrate` / `POST /api/integrate` merges a run's verified branches into
+  `upp/integrate-<run>` in order, stops at the first conflict, and runs `--check`.
+- **Provenance.** Each rally records `{commit, tree, dirty, changed, scope}`: the git tree the
+  referee checked, written through a temporary index (the user's index is untouched): every
+  non-ignored file in a table's own worktree, tracked files elsewhere.
+- **Real cancellation.** A stop kills the running player call's process group (HTTP players
+  abandon the request; OpenUnum turns are cancelled). Ctrl-C on `upp run` stops and kills too.
+- **Crash recovery.** Tables of a dead scheduler process are requeued (`resumes` counter), not
+  marked stopped; `upp resume` or `uppd` continues each after its last recorded rally, restoring
+  agent CLI sessions by id and OpenAI-style conversations from the recorded rallies.
+- **Leases are guards.** Defaults are now 2 hours and 10 rallies (were 30 minutes and 5); they
+  only stop runaways and never drive scheduling. Documented as such.
+- **Effort hints.** `effort = "low"` or a ladder `["low", "medium", "high"]` per rally; sent as
+  `reasoning_effort` by the `openai` player (which also gains a `reasoning_effort` default),
+  `-c model_reasoning_effort` for codex, `UPP_EFFORT` for shell players.
+- **`--parallel auto`** / `max_parallel = "auto"`: the sum of the slots the tables'
+  OpenAI-compatible endpoints report (`/props`, `/health`, `/slots`), minus the requests they
+  are already serving (a shared endpoint is not crowded out), 4 otherwise.
+- **Benchmark.** A harder 8-task set (bench/tasks-hard), arm C (tables + a persistent
+  orchestrator on the same model), headline metric verified tasks per minute and per 100k
+  tokens, and the wall-time investigation: see bench/results.md.
+- **Store migration.** v0.1 databases are upgraded in place (new columns and the `cards` table).
+- **Behaviour changes.** The external server payload carries `card` and referee output instead of
+  `ball`/`answer` (set `server.transcript = true` for the old fields). `table_status` lists cards
+  per rally; the answer is in `--full` or `transcript`. `result` no longer contains the card block.
+
 ## v0.1.1 (2026-10-19) - Fail closed
 
 Correctness fixes from an external review: nothing may score a point without evidence.

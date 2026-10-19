@@ -100,6 +100,27 @@ fn http_api_and_sse() {
     assert!(got.contains("text/event-stream"));
     assert!(got.contains("event: referee"));
 
+    // Cards by default; transcripts on demand.
+    assert!(st["rally_log"][0]["card"]["summary"].is_string(), "{st}");
+    assert!(st["rally_log"][0].get("answer").is_none());
+    let tr: Value = ureq::get(&format!("{base}/api/tables/{id}/transcript?rally=1"))
+        .call()
+        .unwrap()
+        .into_json()
+        .unwrap();
+    assert!(tr["rallies"][0]["answer"].is_string());
+    let cards: Value = ureq::get(&format!("{base}/api/cards?tables={id}&since=0&timeout=5"))
+        .call()
+        .unwrap()
+        .into_json()
+        .unwrap();
+    assert_eq!(cards["cards"].as_array().unwrap().len(), 3, "{cards}");
+    // A sub-table over HTTP: ?parent= on an ended table is refused.
+    let e = ureq::post(&format!("{base}/api/tables?parent={id}")).send_json(json!({
+        "name": "kid", "ball": "x", "referee": [{"kind": "command", "run": "true"}]
+    }));
+    assert!(matches!(e, Err(ureq::Error::Status(400, _))));
+
     let exp = ureq::get(&format!("{base}/api/export"))
         .call()
         .unwrap()

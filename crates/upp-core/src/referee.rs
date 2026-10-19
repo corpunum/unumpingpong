@@ -6,7 +6,7 @@ use crate::config::{Check, CheckSpec};
 use crate::player::{self, PlayCtx};
 use crate::proc;
 use regex::Regex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -15,12 +15,12 @@ use std::time::{Duration, Instant};
 /// Output kept per check (tail), enough to fix the problem, small enough for a fresh context.
 pub const OUTPUT_TAIL: usize = 6000;
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct CheckResult {
     pub name: String,
     pub kind: String,
     pub pass: bool,
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub skipped: bool,
     /// One line: what was checked and the outcome.
     pub summary: String,
@@ -29,7 +29,7 @@ pub struct CheckResult {
     pub duration_ms: u64,
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Verdict {
     pub passed: bool,
     pub checks: Vec<CheckResult>,
@@ -360,13 +360,13 @@ fn run_check(c: &CheckSpec, ctx: &RefCtx, ans_file: Option<&Path>) -> CheckResul
                     .unwrap_or_default(),
                 proc::head(ctx.answer, 12000)
             );
-            let pctx = PlayCtx {
-                table_id: ctx.table_id.to_string(),
-                rally: ctx.rally,
-                cwd: ctx.cwd.to_path_buf(),
-                deadline: ctx.deadline,
-                session_key: format!("{}-judge-{}", ctx.table_id, ctx.rally),
-            };
+            let pctx = PlayCtx::new(
+                ctx.table_id,
+                ctx.rally,
+                ctx.cwd.to_path_buf(),
+                ctx.deadline,
+                &format!("{}-judge-{}", ctx.table_id, ctx.rally),
+            );
             match player::build(spec, &pctx).and_then(|mut p| p.play(&prompt, &pctx)) {
                 Err(e) => (false, format!("judge error: {e}"), String::new()),
                 Ok(r) => {

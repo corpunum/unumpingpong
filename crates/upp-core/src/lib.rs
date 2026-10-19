@@ -9,8 +9,13 @@
 //! Every rally is appended to a SQLite store: a replayable trace.
 
 pub mod api;
+pub mod card;
 pub mod config;
+pub mod git;
+pub mod notify;
+pub mod orchestrator;
 pub mod player;
+pub mod probe;
 pub mod proc;
 pub mod referee;
 pub mod runner;
@@ -18,9 +23,10 @@ pub mod scheduler;
 pub mod store;
 
 pub use config::{
-    Check, CheckSpec, Lease, MatchFile, PlayerSpec, ServerMode, ServerSpec, TableSpec,
+    Check, CheckSpec, Effort, Lease, MatchFile, OrchestratorSpec, Parallel, PlayerSpec, ServerMode,
+    ServerSpec, TableSpec,
 };
 pub use scheduler::Scheduler;
-pub use store::{RallyRow, Store, TableRow};
+pub use store::{CardRow, RallyRow, Store, TableRow};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

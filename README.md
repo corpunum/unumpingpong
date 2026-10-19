@@ -10,6 +10,13 @@ with the referee output and a server note. If it passes, the table scores a **po
 **tables** run in parallel under a cap, and tables chain in series (a point becomes the next
 table's ball). Every rally is appended to a SQLite store: a replayable trace, and training data.
 
+The orchestrator reads **result cards**, not transcripts: every rally is condensed to `done`,
+`evidence`, `open_issues`, `artifacts`, tokens, elapsed time and the referee verdict, and the
+full text stays in the store until someone asks for it. One **persistent orchestrator** (Claude
+Code over MCP, or any model as an `[orchestrator]` player) answers the cards of many tables as
+they arrive. Players can open **sub-tables**, coding tables get their own **git worktree**, and
+every referee result is tied to the exact **git tree** it checked.
+
 One engine with thin front-ends: a **library** (`upp-core`), a **CLI** with a live TUI (`upp`),
 a **daemon** with a local HTTP/JSON API and Server-Sent Events (`uppd`), an **MCP server**
 (`upp mcp`), and an **Agent Skill**. No GPU, model or network dependency of its own; nothing in
@@ -21,14 +28,15 @@ it is specific to one agent, model vendor or operating system.
 agents, real referee commands): a cap of 4 leaves one table queued, returned balls carry the
 referee output, one table is lost after its rallies, and `plan -> build -> ship` unlocks in
 series. Scene 2 is a real run of `examples/three-functions.toml` against a local model, shown at
-3x speed (88 s real time). On a 6-task benchmark both a single agent loop and UnumPingPong solved
-6/6 with unit-test referees; the tables used 4.6x fewer tokens (28.8k vs 132.6k) but took 1.6x
-the wall time (580 s vs 354 s). See [Benchmark](#benchmark).*
+3x speed (88 s real time; recorded with v0.1). On a 6-task benchmark both a single agent loop
+and UnumPingPong verified 6/6 with unit-test referees; v0.2's tables used 7.3x fewer tokens
+(18.2k vs 132.6k: 33 vs 4.5 verified tasks per 100k tokens) but finished fewer tasks per minute
+(0.53 vs 1.02, on a busier shared endpoint). See [Benchmark](#benchmark).*
 
 <details>
 <summary>Benchmark result card</summary>
 
-![benchmark card: 6/6 vs 6/6 points, 28,813 vs 132,635 tokens, 580 s vs 354 s](docs/media/pingpong-result.png)
+![benchmark card: easy set 6/6 vs 6/6, 33.0 vs 4.5 verified tasks per 100k tokens, 0.53 vs 1.02 per minute; hard set partial](docs/media/pingpong-result.png)
 
 </details>
 
@@ -48,21 +56,53 @@ mechanism instead of a habit:
   run first (exit codes, tests, files, HTTP status, JSON values); an LLM judge is a last
   resort, runs only after every deterministic check passed, and must be a different player.
   That stops "claimed done" and most reward hacking: a point needs evidence.
-- **The server sees results, not transcripts.** The orchestrator (a template, a model, or you /
-  Claude / Codex over MCP) reads the ball, the answer and the referee verdict, and writes one
-  note. That is cheap enough to drive many tables at once.
+- **The server reads cards, not transcripts.** The orchestrator (a template, a model, or you /
+  Claude / Codex over MCP) reads a compact result card and the referee verdict, and answers at
+  once: accept, return with one correction, chain the next ball, open a new table, or stop.
+  Transcripts are fetched on demand. That keeps the orchestrator's context small enough to
+  drive many tables for hours; `table_status` shows the orchestrator-side vs player-side tokens.
+- **Leases are guards, not budgets.** Wall time, rallies and optional token/cost caps only stop
+  runaways (defaults: 2 hours, 10 rallies, no token cap). Nothing schedules, prioritises or cuts
+  productive work by budget; progress is points.
 - **Every rally is recorded.** Ball, answer, referee checks, server note, tokens, cost, timing,
   session id: one append-only row per rally. `upp export` turns it into JSON lines for
   analysis or for training briefing models, routers and judges.
 
 ## Benchmark
 
-[`bench/`](bench/) solves the same six small Python tasks twice with the same local model:
-(A) one agent loop, a single conversation where the model self-checks and says DONE, and (B)
-UnumPingPong tables (fresh small context per ball, referee feedback, 3 in parallel). Both are
-scored afterwards by the same unit tests. Result (one run, honest): both 6/6; B used 4.6x fewer
-tokens, A's "done" was never wrong on this easy set, and B was slower in wall time. Details,
-caveats and the reproduce command are in [bench/results.md](bench/results.md).
+[`bench/`](bench/) solves the same Python tasks with the same local model as (A) one agent loop,
+a single conversation where the model self-checks and says DONE, (B) UnumPingPong tables (a
+fresh small context per ball, referee feedback, cards, an effort ladder, `--parallel auto`), and
+(C) B plus a persistent orchestrator on the same model. Every arm is scored afterwards by the
+same unit tests. The headline metric is **verified tasks per minute and per 100k tokens**.
+
+| Easy set, 6 tasks | A: one agent loop | B v0.1 tables | B v0.2 tables |
+| --- | --- | --- | --- |
+| Verified | 6/6 | 6/6 | 6/6 |
+| Verified per 100k tokens | 4.5 | 20.8 | **33.0** |
+| Verified per minute | **1.02** | 0.62 | 0.53 |
+| Tokens | 132,635 | 28,813 | 18,185 |
+| Completion tokens | 14,521 | 25,391 | 14,337 |
+| Wall | 354 s | 580 s | 675 s (endpoint shared with 2-3 other streams) |
+
+Findings, stated plainly:
+
+- **Tokens:** tables need far fewer tokens for the same verified result (fresh small contexts;
+  A re-sends one growing conversation every turn). The v0.2 effort ladder (low first, higher
+  only after a return) cut B's completion tokens by 44% against v0.1.
+- **Wall time:** the single loop is still faster per minute on this endpoint. Its 3 slots decode
+  ~1.15x one stream in total (48 -> 56 tok/s measured), so wall time is roughly total
+  completion tokens divided by the endpoint's decode rate, and parallel tables do not multiply
+  it. The v0.2 run also shared the endpoint with 2-3 other streams. `--parallel auto` now leaves
+  busy slots to other traffic.
+- **Hard set (8 tasks, partial):** stopped at the 40-minute model-time budget with B at 1/8
+  verified and **no A run yet**, so there is no comparison. It already shows the referee earning
+  its place: in its own result cards the player claimed `done` 6 times and the referee rejected
+  5 of them. 4 of 12 rallies spent the whole 6k-token budget, mostly reasoning, and truncated the
+  code.
+
+Full tables, the wall-time investigation, caveats and the reproduce command are in
+[bench/results.md](bench/results.md).
 
 ## Concepts
 
@@ -72,13 +112,18 @@ caveats and the reproduce command are in [bench/results.md](bench/results.md).
 | **Ball** | The unit of work: a brief (with templates for files and the upstream answer) plus the evidence expected. |
 | **Rally** | Player answers -> referee checks -> server reviews -> the ball goes back with the referee output and a note, or the point is scored. |
 | **Point** | The ball accepted with evidence. The answer is stored as the table's result and becomes `{{prev.answer}}` downstream. |
-| **Lease** | Wall time, max rallies, optional token and cost budget. The first one reached ends the table. |
+| **Card** | The compact result of one rally: the player's `<card>` block (or an extractor's reading of its answer) plus tokens, elapsed time, the referee verdict with an output tail, provenance and sub-table results. What the server reads. |
+| **Orchestrator** | A long-lived server that answers the cards of many tables as they arrive: Claude Code over MCP (`cards_wait` / `card_answer`), or any adapter as an `[orchestrator]` player. |
+| **Sub-table** | A table a player opens with its own table as `parent`; the parent's rally waits for it. Depth cap `max_depth` (3). |
+| **Lease** | Runaway guard: wall time (2 h), max rallies (10), optional token and cost caps. The first one reached ends the table. Never used to schedule. |
 | **Parallel** | Tables run at once up to `max_parallel` (per scheduler process). |
 | **Serial** | `after = "other-table"`: start only after that table scored. If it ends without a point, the chain is skipped. |
 | **Server** | `auto` (template feedback), `model` (another player writes the note), `external` (an outside agent answers each ball over MCP/HTTP/CLI). |
 
 Statuses: `queued`, `running`, `awaiting_server`, then one of `point`, `lost` (max rallies),
-`expired` (wall/token/cost lease), `stopped`, `skipped` (upstream failed), `error`.
+`expired` (wall/token/cost lease), `stopped`, `skipped` (upstream failed), `error`. A running
+table's phase is `setup`, `player`, `children` (waiting on its sub-tables), `referee` or
+`server`.
 
 ## Architecture
 
@@ -96,10 +141,14 @@ flowchart LR
   R1 --> P["player\nshell | openai | openunum |\nclaude | codex | gemini | opencode"]
   R1 --> REF["referee\ncommand | file_exists | http_ok |\njson_path_equals | judge"]
   R1 --> SV["server\nauto | model | external"]
-  SV -. external .-> S
+  SV -. external: cards .-> S
+  S -. cards_wait / card_answer .-> O["orchestrator\nClaude Code over MCP,\nor any [orchestrator] player"]
+  P -. sub-tables (parent) .-> S
 ```
 
-The store is also the bus between processes. `upp run`, `uppd` and `upp mcp` each run a
+The store is also the bus between processes, and waiting is event-driven: in one process a
+write wakes every waiter at once (a condition variable); a write from another process is noticed
+through SQLite's `data_version` within 0.4 s, with no query loop. `upp run`, `uppd` and `upp mcp` each run a
 scheduler that claims queued tables atomically; `upp watch` reads the same database, so it shows
 tables no matter who runs them. Stop requests and external server answers are rows too, which is
 why `upp answer`, `POST /api/tables/{id}/answer` and the MCP tool `ball_answer` all work against a
@@ -215,8 +264,99 @@ checks will run, so it knows the evidence expected.
   keys in `upp watch`. `accept` scores only if the referee passed: the referee decides, the
   server can only be stricter. `review_points` defaults to true here, `timeout_secs` to 3600.
 
+What the server reads is the **card** and the referee output (failed checks with an 800-byte
+tail), not the answer; `server.transcript = true` adds the full ball and answer, and
+`transcript(table, rally)` fetches them on demand.
+
 This is how an outside Claude Code / Codex / Gemini / OpenUnum session orchestrates: it opens
-tables for cheaper or local workers and reviews their balls with evidence attached.
+tables for cheaper or local workers and answers their cards with `cards_wait` / `card_answer`
+([recipe](docs/integrations/claude-code.md#as-the-orchestrator-over-mcp-cards_wait--card_answer)).
+
+## Result cards
+
+The first ball asks the player to end with a card block:
+
+```text
+<card>
+done: yes
+summary: parse() handles quoted fields; all 14 tests pass
+evidence: python3 -m unittest -q -> OK (14 tests)
+open_issues: none
+artifacts: solution.py; commit 3f2a9c1
+</card>
+```
+
+Without a readable block, a deterministic extractor builds the card from the answer (first
+prose line, test/exit lines as evidence, TODO/"could not" lines as open issues, file paths,
+commits and PR links as artifacts; `source: "extracted"`). The engine then adds what it knows
+for certain: tokens, elapsed time, the referee verdict, files the table changed (from git), the
+tree hash, and sub-table results. `done` is the player's claim; `referee.passed` is the truth.
+Cards are stored next to the full transcript (append-only); `final` cards close each table.
+`card = false` on a table stops asking for the block (the extractor still runs).
+
+## Persistent orchestrator
+
+Any adapter can be the server of a whole run: give the match an `[orchestrator]` and its tables
+default to `server.mode = "external"`.
+
+```toml
+[orchestrator]
+player = { kind = "openai", base_url = "http://127.0.0.1:8080/v1", model = "local", reasoning_effort = "low" }
+instructions = "Accept when the referee passed; otherwise one precise correction from its output."
+batch = 8              # cards per message when several wait
+refresh_every = 40     # fresh orchestrator session after N cards (its context stays small)
+max_new_tables = 50    # runaway guard on `next` / `open`
+```
+
+It sleeps until any table has a card waiting, sends every waiting card in one message, and
+applies the decisions (`{"decisions": [{"table", "verdict", "note", "next", "open"}]}`). A card
+it skips or garbles, or a failed orchestrator call, gets the referee's default (pass: accept;
+fail: return with the referee output), so no table stalls on it. `upp orchestrate file.toml`
+runs one for every waiting card in the store, across runs. Its reported tokens are charged to
+the tables it served: `orchestrator_tokens` next to `player_tokens`.
+
+## Nested tables, worktrees, provenance
+
+- **Sub-tables.** A player's process gets `UPP_TABLE`, `UPP_RALLY`, `UPP_RUN`, `UPP_DEPTH` and
+  `UPP_DB`. `upp create sub.toml --parent "$UPP_TABLE"` (MCP `table_create` with `parent`, HTTP
+  `POST /api/tables?parent=ID`) opens sub-tables in the same run. They inherit the player and
+  the working directory and need their own referee. The parent's rally waits for them (without
+  holding a parallel slot) before its referee runs, and their final cards appear under
+  `children` in the parent's card. Depth is capped by `max_depth` (default 3).
+- **Worktrees.** `worktree = { repo = "." }` (per table or in `[defaults]`) gives a table its
+  own `git worktree` on branch `upp/<table>-<id>` under `<store dir>/worktrees/`. Players and the
+  referee work there, isolated from each other and from your checkout. A point commits exactly
+  the verified tree on that branch. `upp integrate [--run ID] [--check CMD]` merges the run's
+  verified branches, in order, into a new `upp/integrate-<run>` branch (stopping at the first
+  conflict) and runs the check there. Your branch is never touched.
+- **Provenance.** Before the referee runs, the table's working state is written as a git tree
+  through a temporary index (your index is never touched): every rally records `{commit, tree,
+  dirty, changed, scope}`, so a referee result names the exact content it checked. In a table's
+  own worktree the snapshot covers every non-ignored file (`scope: "all"`); elsewhere only
+  tracked files (`scope: "tracked"`, via `git stash create`), because a cwd may sit inside a
+  large unrelated repository. Outside git, provenance is `{git: false}`.
+
+## Cancellation and crash recovery
+
+`upp stop`, `table_stop` and `POST /api/tables/{id}/stop` kill the running player call's process
+group at once (an HTTP player's request is abandoned; an OpenUnum turn is cancelled) and stop the
+table's sub-tables. If a scheduler process dies (kill -9, crash, reboot), its tables are requeued,
+not lost: `upp resume` (or a running `uppd`) continues each one after its last recorded rally,
+restoring the player's session where it can (agent CLIs resume by session id; an OpenAI-style
+conversation is rebuilt from the recorded rallies; otherwise the brief is repeated).
+
+## Effort hints and `--parallel auto`
+
+`effort = ["low", "medium", "high"]` gives rally *n* the *n*-th level (the last repeats): a cheap
+first try, more thinking only after the referee returned the ball. The `openai` player sends it
+as `reasoning_effort` (the player's own `reasoning_effort` is the default); `codex` gets
+`-c model_reasoning_effort=...`; `shell` players see `UPP_EFFORT`; other CLIs ignore it.
+
+`--parallel auto` (or `max_parallel = "auto"`) asks the OpenAI-compatible endpoints the tables use
+how many requests they admit (`/props` `total_slots`, `/health` `slots`, or `/slots`), leaves the
+requests they are already serving to that traffic (`/health` `in_flight`, `/slots`
+`is_processing`; at least one slot stays yours), and caps at the sum (4 when nothing answers).
+A slot count is admission, not throughput: see the benchmark.
 
 ## Match file reference
 
@@ -231,6 +371,11 @@ server = { mode = "auto" }
 lease = { wall_secs = 1800, max_rallies = 5 }
 referee = [ ... ]
 apply = { write_file = "src/lib.rs" }
+effort = ["low", "medium", "high"]   # reasoning effort per rally (openai, codex, shell)
+worktree = { repo = "." }            # every table in its own git worktree
+
+[orchestrator]             # optional: a persistent orchestrator for this match (see above)
+player = { kind = "openai", model = "local-model" }
 
 [[table]]
 name = "unique-name"
@@ -240,10 +385,14 @@ after = "other-table"      # serial chain
 cwd = "work/x"             # created if missing
 setup = "cp -R ../fixture/. ."   # run once in cwd before rally 1; failure = error
 apply = { write_file = "src/lib.rs", from = "code_block" }   # or from = "answer"
-lease = { wall_secs = 600, max_rallies = 4, max_tokens = 200000, max_cost_usd = 1.5 }
+lease = { wall_secs = 600, max_rallies = 4, max_tokens = 200000, max_cost_usd = 1.5 }   # guards only
+card = true                # ask for a <card> block (default true)
+max_depth = 3              # deepest sub-table depth (default 3)
+worktree = { repo = "..", base = "main", branch = "upp/fix", path = "/tmp/wt/fix" }
 unverified = false         # true only for a table with no referee checks (its point is marked UNVERIFIED)
 player = { kind = "claude", model = "sonnet", args = [], timeout_secs = 900, resume = true, env = {} }
-server = { mode = "external", review_points = true, timeout_secs = 3600, note = "standing instruction" }
+# openai: { kind = "openai", base_url, model, api_key_env, system, temperature, max_tokens, reasoning_effort, halogen_keep, extra }
+server = { mode = "external", review_points = true, timeout_secs = 3600, note = "standing instruction", transcript = false }
 referee = [
   { kind = "command", name = "tests", run = "cargo test", timeout_secs = 600, expect_regex = "test result: ok" },
   { kind = "judge", player = { kind = "openai", model = "other-model" }, rubric = "..." },
@@ -257,15 +406,20 @@ variable is required; secrets are referenced by name only (`api_key_env`, `passw
 ## CLI
 
 ```
-upp [--db PATH] run <match> [--parallel N] [--watch] [--exit-when-done] [--json]
-upp create <match>            queue for a running uppd / upp mcp
+upp [--db PATH] run <match> [--parallel N|auto] [--watch] [--exit-when-done] [--json]
+upp create <match> [--parent ID]    queue for a running uppd / upp mcp; --parent: sub-tables
 upp validate <match>
 upp watch [--run ID | --all] [--exit-when-done]
 upp list [--all] [--json]
-upp status <table> [--full]
+upp status <table> [--full]         cards per rally, token split; --full adds balls and answers
+upp transcript <table> [--rally N]  the full text, on demand
+upp cards [--run ID] [--table T]... [--since N] [--wait SECS]
 upp pending
-upp answer <table> accept|return|stop [note...]
-upp stop <table> | --run ID
+upp answer <table> accept|return|stop [note...] [--next BALL]
+upp orchestrate <file> [--run ID]   run the file's [orchestrator] for every waiting card
+upp stop <table> | --run ID         kills the running player call
+upp resume [--run ID]               run tables requeued after their scheduler died
+upp integrate [--run ID] [--into REF] [--check CMD]
 upp export [--run ID] [-o FILE]
 upp mcp [--parallel N] [--queue-only]
 ```
@@ -280,10 +434,14 @@ uppd [--listen 127.0.0.1:7878] [--db PATH] [--parallel N]
 
 GET  /health
 GET  /api/tables[?all=1&run=ID]
-POST /api/tables                       match JSON or a single table
-GET  /api/tables/{id}[?full=1]
-POST /api/tables/{id}/stop
-POST /api/tables/{id}/answer           {"verdict": "accept|return|stop", "note": "..."}
+POST /api/tables[?parent=ID]           match JSON or a single table (?parent: sub-tables)
+GET  /api/tables/{id}[?full=1]         rallies as cards, token split, pending ball
+GET  /api/tables/{id}/cards
+GET  /api/tables/{id}/transcript[?rally=N]
+POST /api/tables/{id}/stop             kills the running player call
+POST /api/tables/{id}/answer           {"verdict": "accept|return|stop", "note": "...", "next": "...", "open": {...}}
+GET  /api/cards?tables=a,b&run=R&since=N&timeout=60   block until a card arrives
+POST /api/integrate                    {"run": "...", "into": "...", "check": "..."}
 GET  /api/pending
 GET  /api/wait?tables=a,b&timeout=60   blocks until a ball waits for its server or the tables end
 GET  /api/events[?since=ID]            text/event-stream, one JSON event per message
@@ -297,8 +455,9 @@ commands as you through a `shell` player. A systemd user unit is in
 ## MCP server
 
 `upp mcp` speaks MCP over stdio (protocol `2025-06-18`) and, unless `--queue-only`, runs queued
-tables itself. Tools: `table_create`, `table_status`, `table_list`, `ball_answer`, `table_stop`,
-`table_wait`.
+tables itself. Tools: `table_create` (with `parent` for sub-tables), `cards_wait`, `card_answer`,
+`transcript`, `table_status`, `table_list`, `table_wait`, `ball_answer`, `table_stop`,
+`integrate`.
 
 ```bash
 claude mcp add unumpingpong -- upp mcp
@@ -341,16 +500,20 @@ Honest positioning, not a feature war:
 - **CI**: CI verifies after a push. A table verifies every rally before anything is pushed, and
   feeds the failure straight back to the worker.
 
-## Limitations (v0.1)
+## Limitations (v0.2)
 
-- **No sandbox.** Players and referee commands run with your user's permissions. Use worktrees,
-  containers or the tools' own sandbox flags.
+- **No sandbox.** Players and referee commands run with your user's permissions. Worktrees
+  isolate tables from each other, not from your machine; use containers or the tools' own
+  sandbox flags for that.
 - One player per table (rotation and escalation between players are planned). No briefing
   profiles yet (learning per model family which briefs score).
-- `stop` takes effect between rallies; a running player call ends at its timeout or the wall
-  lease. Interrupting `upp run` marks its running tables `stopped`, but agent CLIs it started may
-  finish their current turn.
+- Cancellation kills the player's process group; a process that left the group (`setsid`, a
+  daemon it started) survives. An abandoned HTTP request may still finish on the server.
+- Crash recovery resumes after the last *recorded* rally: a rally in flight when the process
+  died runs again. An OpenAI-style session is rebuilt from the recorded rallies, which drops
+  failed (fault) turns.
 - The parallel cap is per scheduler process (`upp run`, `uppd` and `upp mcp` each have one).
+- Card fields from the extractor are heuristics; the referee verdict on the card is not.
 - Token and cost budgets only count what a player reports (`shell` reports nothing).
 - Tested on Linux. macOS and Windows build but are untested; `command` strings use `sh -c`
   (`cmd /C` on Windows).

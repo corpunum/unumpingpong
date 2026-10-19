@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 /// Captured output is kept to the last `MAX_CAPTURE` bytes per stream.
@@ -17,12 +18,14 @@ pub struct CmdOut {
     pub stdout: String,
     pub stderr: String,
     pub timed_out: bool,
+    /// Killed because the cancel flag was set (the table was stopped).
+    pub cancelled: bool,
     pub duration_ms: u64,
 }
 
 impl CmdOut {
     pub fn ok(&self) -> bool {
-        self.code == Some(0) && !self.timed_out
+        self.code == Some(0) && !self.timed_out && !self.cancelled
     }
     pub fn combined(&self) -> String {
         if self.stderr.trim().is_empty() {
@@ -83,6 +86,18 @@ pub fn run(
     env: &BTreeMap<String, String>,
     timeout: Duration,
 ) -> Result<CmdOut, String> {
+    run_cancellable(argv, cwd, stdin, env, timeout, None)
+}
+
+/// Like [`run`], and also kills the whole process group as soon as `cancel` is set.
+pub fn run_cancellable(
+    argv: &[String],
+    cwd: &Path,
+    stdin: Option<&str>,
+    env: &BTreeMap<String, String>,
+    timeout: Duration,
+    cancel: Option<&AtomicBool>,
+) -> Result<CmdOut, String> {
     let (prog, args) = argv.split_first().ok_or("empty command")?;
     let mut cmd = Command::new(prog);
     cmd.args(args)
@@ -115,10 +130,16 @@ pub fn run(
     let out_h = drain(child.stdout.take().expect("stdout piped"));
     let err_h = drain(child.stderr.take().expect("stderr piped"));
     let mut timed_out = false;
+    let mut cancelled = false;
     let status = loop {
         match child.try_wait() {
             Ok(Some(s)) => break Some(s),
             Ok(None) => {
+                if cancel.is_some_and(|c| c.load(Ordering::SeqCst)) {
+                    cancelled = true;
+                    kill_tree(&mut child);
+                    break child.wait().ok();
+                }
                 if start.elapsed() >= timeout {
                     timed_out = true;
                     kill_tree(&mut child);
@@ -132,7 +153,7 @@ pub fn run(
     let stdout = String::from_utf8_lossy(&out_h.join().unwrap_or_default()).into_owned();
     let stderr = String::from_utf8_lossy(&err_h.join().unwrap_or_default()).into_owned();
     Ok(CmdOut {
-        code: if timed_out {
+        code: if timed_out || cancelled {
             None
         } else {
             status.and_then(|s| s.code())
@@ -140,6 +161,7 @@ pub fn run(
         stdout,
         stderr,
         timed_out,
+        cancelled,
         duration_ms: start.elapsed().as_millis() as u64,
     })
 }
@@ -210,6 +232,28 @@ mod tests {
             "took {:?}",
             t.elapsed()
         );
+    }
+
+    #[test]
+    fn cancel_kills_the_group_at_once() {
+        let flag = std::sync::Arc::new(AtomicBool::new(false));
+        let f2 = flag.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(200));
+            f2.store(true, Ordering::SeqCst);
+        });
+        let t = Instant::now();
+        let o = run_cancellable(
+            &sh("sleep 30 & sleep 30"),
+            Path::new("."),
+            None,
+            &BTreeMap::new(),
+            Duration::from_secs(60),
+            Some(&flag),
+        )
+        .unwrap();
+        assert!(o.cancelled && !o.timed_out && !o.ok());
+        assert!(t.elapsed() < Duration::from_secs(5), "{:?}", t.elapsed());
     }
 
     #[test]

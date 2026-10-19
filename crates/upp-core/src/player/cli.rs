@@ -160,15 +160,29 @@ impl Player for AgentPlayer {
             argv.splice(pos..pos, ["--session-id".to_string(), id.clone()]);
             gemini_new = Some(id);
         }
-        let out = proc::run(
+        if self.flavor == Flavor::Codex {
+            if let Some(e) = &ctx.effort {
+                // codex reads config overrides: -c model_reasoning_effort="low"
+                let pos = argv.len() - 1; // before the trailing "-"
+                argv.splice(
+                    pos..pos,
+                    ["-c".to_string(), format!("model_reasoning_effort=\"{e}\"")],
+                );
+            }
+        }
+        let out = proc::run_cancellable(
             &argv,
             &ctx.cwd,
             stdin.as_deref(),
-            &self.spec.env,
+            &ctx.env_with(&self.spec.env),
             ctx.budget(self.spec.timeout_secs, 900),
+            Some(&ctx.cancel),
         )?;
         let last = std::fs::read_to_string(&out_file).ok();
         let _ = std::fs::remove_file(&out_file);
+        if out.cancelled {
+            return Err(format!("{} cancelled (table stopped)", self.flavor.bin()));
+        }
         if out.timed_out {
             return Err(format!(
                 "{} timed out after {:.0}s",
@@ -217,6 +231,17 @@ impl Player for AgentPlayer {
 
     fn keeps_session(&self) -> bool {
         self.resume()
+    }
+
+    fn restore(&mut self, _history: &[(String, String)], session: Option<&str>) -> bool {
+        // Gemini sessions are keyed by the UUID we chose, which is the stored session id too.
+        match session.filter(|_| self.resume()) {
+            Some(s) => {
+                self.session = Some(s.to_string());
+                true
+            }
+            None => false,
+        }
     }
 }
 
@@ -470,13 +495,13 @@ mod tests {
                 ..Default::default()
             },
         );
-        let ctx = PlayCtx {
-            table_id: "t".into(),
-            rally: 1,
-            cwd: d.path().to_path_buf(),
-            deadline: std::time::Instant::now() + std::time::Duration::from_secs(20),
-            session_key: "t".into(),
-        };
+        let ctx = PlayCtx::new(
+            "t",
+            1,
+            d.path().to_path_buf(),
+            std::time::Instant::now() + std::time::Duration::from_secs(20),
+            "t",
+        );
         let e = p.play("ball", &ctx).unwrap_err();
         assert!(e.contains("exited with 1"), "{e}");
     }

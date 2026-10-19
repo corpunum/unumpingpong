@@ -5,8 +5,11 @@ UnumPingPong meets agent tools in two directions:
 - **As a player (worker).** The tool answers balls at a table. One adapter per tool, all behind
   the same `Player` trait; each keeps the tool's own session across rallies where it can.
 - **As a server (orchestrator).** The tool drives tables over MCP (`upp mcp`), HTTP (`uppd`) or
-  the CLI: it opens tables for workers and, with `server.mode = "external"`, reviews each ball
-  with `ball_answer`.
+  the CLI: it opens tables for workers and, with `server.mode = "external"`, answers every
+  result card with `cards_wait` / `card_answer` (fetching a `transcript` only on demand). The
+  Claude Code recipe is in [claude-code.md](claude-code.md#as-the-orchestrator-over-mcp-cards_wait--card_answer).
+- **As a persistent orchestrator player.** Any adapter can also *be* the orchestrator, with no
+  outside agent: `[orchestrator] player = {...}` in a match file (or `upp orchestrate`).
 
 Status legend: **tested** = run end to end with the tool on Linux; **tested live** = a real model
 turn through the adapter; **registered** = the tool accepted and connected/listed the MCP

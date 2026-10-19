@@ -9,7 +9,10 @@ mod shell;
 
 use crate::config::PlayerSpec;
 use serde::Serialize;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 pub use cli::{parse_claude, parse_codex, parse_gemini, parse_opencode, Flavor};
@@ -25,9 +28,48 @@ pub struct PlayCtx {
     pub deadline: Instant,
     /// Stable per table (and role): a session id for tools that take one from the caller.
     pub session_key: String,
+    /// Environment for process players: `UPP_TABLE`, `UPP_RALLY`, `UPP_DB`, `UPP_RUN`,
+    /// `UPP_DEPTH` (so a player can open sub-tables with its table as the parent).
+    pub env: BTreeMap<String, String>,
+    /// Reasoning effort hint for this rally (the table's `effort`).
+    pub effort: Option<String>,
+    /// Set when the table is stopped: players abort the running call (process group killed).
+    pub cancel: Arc<AtomicBool>,
 }
 
 impl PlayCtx {
+    pub fn new(
+        table_id: &str,
+        rally: u32,
+        cwd: PathBuf,
+        deadline: Instant,
+        session_key: &str,
+    ) -> PlayCtx {
+        PlayCtx {
+            table_id: table_id.to_string(),
+            rally,
+            cwd,
+            deadline,
+            session_key: session_key.to_string(),
+            env: BTreeMap::new(),
+            effort: None,
+            cancel: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    pub fn cancelled(&self) -> bool {
+        self.cancel.load(Ordering::SeqCst)
+    }
+
+    /// `env` merged under the player's own environment (the player's entries win).
+    pub fn env_with(&self, own: &BTreeMap<String, String>) -> BTreeMap<String, String> {
+        let mut e = self.env.clone();
+        e.insert("UPP_TABLE".into(), self.table_id.clone());
+        e.insert("UPP_RALLY".into(), self.rally.to_string());
+        e.extend(own.iter().map(|(k, v)| (k.clone(), v.clone())));
+        e
+    }
+
     /// Time left for one call: the lease remainder, capped by the player's own timeout.
     pub fn budget(&self, cap_secs: Option<u64>, default_secs: u64) -> Duration {
         self.deadline
@@ -52,6 +94,11 @@ pub trait Player: Send {
     fn play(&mut self, ball: &str, ctx: &PlayCtx) -> Result<Reply, String>;
     /// True when the player remembers earlier rallies, so a return message need not repeat the brief.
     fn keeps_session(&self) -> bool;
+    /// Crash recovery: rebuild the session from the recorded rallies (ball, answer) and the
+    /// tool's session id. Returns true when the player now remembers them.
+    fn restore(&mut self, _history: &[(String, String)], _session: Option<&str>) -> bool {
+        false
+    }
 }
 
 pub fn build(spec: &PlayerSpec, _ctx: &PlayCtx) -> Result<Box<dyn Player>, String> {
