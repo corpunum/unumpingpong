@@ -182,9 +182,15 @@ impl Player for OpenAiPlayer {
             .push(json!({"role": "assistant", "content": raw.clone()}));
         self.kept = true;
         let u = &v["usage"];
+        let prompt = u["prompt_tokens"].as_u64().unwrap_or(0);
+        let cached = u["prompt_tokens_details"]["cached_tokens"]
+            .as_u64()
+            .unwrap_or(0)
+            .min(prompt);
         Ok(Reply {
             text: strip_think(&raw),
-            tokens_in: u["prompt_tokens"].as_u64().unwrap_or(0),
+            tokens_in: prompt - cached,
+            tokens_cached: cached,
             tokens_out: u["completion_tokens"].as_u64().unwrap_or(0),
             cost_usd: 0.0,
             session: Some(ctx.session_key.clone()),

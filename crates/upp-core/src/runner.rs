@@ -10,6 +10,7 @@ use crate::git;
 use crate::player::{self, PlayCtx, Player, Reply};
 use crate::proc;
 use crate::referee::{self, RefCtx, Verdict};
+use crate::search;
 use crate::store::{now_ms, Progress, RallyRow, Store};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -145,6 +146,11 @@ fn describe_checks(spec: &TableSpec) -> String {
     s + &card_note
 }
 
+/// Referee output a returned ball carries per failing check: its head (the first error)
+/// and its tail (the summary). A player that keeps its session gets only this delta.
+pub const RETURN_HEAD: usize = 700;
+pub const RETURN_TAIL: usize = 1300;
+
 fn return_message(
     n: u32,
     verdict: &Verdict,
@@ -152,23 +158,34 @@ fn return_message(
     standing: Option<&str>,
     brief: Option<&str>,
 ) -> String {
-    let mut s = format!("Rally {n}: the referee did not accept this yet.\n\n");
-    let report = verdict.report(true);
-    if !report.trim().is_empty() {
+    let mut s = format!("Rally {n}: the referee did not accept this yet.\n");
+    let failed: Vec<&referee::CheckResult> = verdict
+        .checks
+        .iter()
+        .filter(|c| !c.pass && !c.skipped)
+        .collect();
+    if !failed.is_empty() {
         s.push_str("Failed checks:\n");
-        s.push_str(&report);
-        s.push('\n');
+        for c in failed {
+            s.push_str(&format!("- [FAIL] {}: {}\n", c.name, c.summary));
+            let out = c.output.trim();
+            if !out.is_empty() {
+                s.push_str("```\n");
+                s.push_str(&proc::head_tail(out, RETURN_HEAD, RETURN_TAIL));
+                s.push_str("\n```\n");
+            }
+        }
     } else if verdict.passed {
-        s.push_str("The checks passed, but the server returned the ball.\n\n");
+        s.push_str("The checks passed, but the server returned the ball.\n");
     }
     if !note.trim().is_empty() {
-        s.push_str(&format!("Server note: {}\n\n", note.trim()));
+        s.push_str(&format!("Server note: {}\n", note.trim()));
     }
     if let Some(st) = standing {
-        s.push_str(&format!("{}\n\n", st.trim()));
+        s.push_str(&format!("{}\n", st.trim()));
     }
     if let Some(b) = brief {
-        s.push_str(&format!("Original ball (repeated):\n{b}\n\n"));
+        s.push_str(&format!("\nOriginal ball (repeated):\n{b}\n\n"));
     }
     s.push_str("Fix it and answer again; the same checks will run.");
     s
@@ -177,7 +194,7 @@ fn return_message(
 fn fault_message(err: &str, brief: Option<&str>) -> String {
     let mut s = format!(
         "Your previous turn failed before the referee could run:\n{}\n\nPlease try again.",
-        proc::tail(err, 2000)
+        proc::head_tail(err.trim(), RETURN_HEAD, RETURN_TAIL)
     );
     if let Some(b) = brief {
         s.push_str(&format!("\n\nOriginal ball (repeated):\n{b}"));
@@ -377,7 +394,7 @@ fn build_card(
         "open_issues": c.open_issues,
         "artifacts": c.artifacts,
         "source": c.source,
-        "tokens": reply.tokens_in + reply.tokens_out,
+        "tokens": reply.billable(),
         "elapsed_s": (elapsed.as_millis() as f64 / 1000.0),
         "referee": {"passed": verdict.passed, "failed": failed, "tail": tail},
         "provenance": if prov["git"] == true {
@@ -460,7 +477,10 @@ fn run_inner(store: &Store, id: &str) -> Result<String, String> {
         ("prev.name", prev_name.as_str()),
         ("table", spec.name.as_str()),
     ];
-    let brief = render_files(&render(&ball_t, &vars), &cwd) + &describe_checks(&spec);
+    // {{search:...}} before {{file:...}}: a file's own text is never expanded.
+    let brief = render_files(&search::render(&render(&ball_t, &vars), &cwd), &cwd)
+        + &search::context(&spec.context_search, &cwd)
+        + &describe_checks(&spec);
     let goal = render(&goal, &vars);
 
     let cancel = Arc::new(AtomicBool::new(false));
@@ -499,7 +519,10 @@ fn run_inner(store: &Store, id: &str) -> Result<String, String> {
     // Crash recovery: continue after the last recorded rally.
     if let Some(last) = prior.last() {
         prog.rallies = last.n;
-        prog.tokens = prior.iter().map(|r| r.tokens_in + r.tokens_out).sum();
+        prog.tokens = prior
+            .iter()
+            .map(|r| player::billable(r.tokens_in, r.tokens_cached, r.tokens_out))
+            .sum();
         prog.cost_usd = prior.iter().map(|r| r.cost_usd).sum();
         prog.trail = row.trail.clone();
         prog.session = row.session.clone();
@@ -541,6 +564,7 @@ fn run_inner(store: &Store, id: &str) -> Result<String, String> {
         store.event(id, "resumed", json!({"after_rally": 0}))?;
     }
     let mut seen_children: Vec<String> = store.children(id)?.into_iter().map(|t| t.id).collect();
+    let mut last_mode = String::new();
     for n in first..=lease.rallies() {
         if store.stop_requested(id)? {
             store.finish(id, "stopped", None, "stop requested")?;
@@ -597,7 +621,13 @@ fn run_inner(store: &Store, id: &str) -> Result<String, String> {
         } else {
             Some(brief.as_str())
         };
-        let reply = match player.play(&msg, &ctx) {
+        let played = player.play(&msg, &ctx);
+        let mode = player.mode();
+        if !mode.is_empty() && mode != last_mode {
+            store.event(id, "player_mode", json!({"n": n, "mode": mode}))?;
+            last_mode = mode;
+        }
+        let reply = match played {
             Ok(r) => r,
             Err(err) => {
                 prog.rallies = n;
@@ -614,6 +644,7 @@ fn run_inner(store: &Store, id: &str) -> Result<String, String> {
                     note: err.clone(),
                     tokens_in: 0,
                     tokens_out: 0,
+                    tokens_cached: 0,
                     cost_usd: 0.0,
                     session: None,
                     started_ms: started,
@@ -637,7 +668,7 @@ fn run_inner(store: &Store, id: &str) -> Result<String, String> {
         };
         let elapsed = t_play.elapsed();
         prog.rallies = n;
-        prog.tokens += reply.tokens_in + reply.tokens_out;
+        prog.tokens += reply.billable();
         prog.cost_usd += reply.cost_usd;
         if reply.session.is_some() {
             prog.session = reply.session.clone();
@@ -647,7 +678,8 @@ fn run_inner(store: &Store, id: &str) -> Result<String, String> {
         store.event(
             id,
             "answer",
-            json!({"n": n, "answer": proc::head(&reply.text, 400), "tokens": reply.tokens_in + reply.tokens_out}),
+            json!({"n": n, "answer": proc::head(&reply.text, 400), "tokens": reply.billable(),
+                   "tokens_in": reply.tokens_in, "tokens_cached": reply.tokens_cached, "tokens_out": reply.tokens_out}),
         )?;
 
         // Sub-tables opened during this rally: the referee runs once they have ended.
@@ -747,6 +779,7 @@ fn run_inner(store: &Store, id: &str) -> Result<String, String> {
             note: note.clone(),
             tokens_in: reply.tokens_in,
             tokens_out: reply.tokens_out,
+            tokens_cached: reply.tokens_cached,
             cost_usd: reply.cost_usd,
             session: reply.session.clone(),
             started_ms: started,
@@ -884,7 +917,7 @@ fn decide(
                 // referee output alone (never a point: the referee failed).
                 return Ok(match model.play(&prompt, &sctx) {
                     Ok(r) => {
-                        store.add_server_tokens(id, r.tokens_in + r.tokens_out)?;
+                        store.add_server_tokens(id, r.billable())?;
                         Decision::Return(r.text.trim().to_string())
                     }
                     Err(e) => {
@@ -899,7 +932,7 @@ fn decide(
             for attempt in 1..=REVIEW_ATTEMPTS {
                 match model.play(&prompt, &sctx) {
                     Ok(r) => {
-                        store.add_server_tokens(id, r.tokens_in + r.tokens_out)?;
+                        store.add_server_tokens(id, r.billable())?;
                         let t = r.text.trim();
                         return Ok(if referee::first_word(t) == "ACCEPT" {
                             Decision::Point

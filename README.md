@@ -31,14 +31,16 @@ series. Scene 2 is a real run of `examples/three-functions.toml` against a local
 3x speed (88 s real time; recorded with v0.1). On a 6-task benchmark both a single agent loop
 and UnumPingPong verified 6/6 with unit-test referees; v0.2's tables used 7.3x fewer tokens
 (18.2k vs 132.6k: 33 vs 4.5 verified tasks per 100k tokens) but finished fewer tasks per minute
-(0.53 vs 1.02, on a busier shared endpoint). With cloud CLI players (Claude Haiku, Luna low) both
-arms verified every task and tables were slightly faster but used 1.3-2.8x *more* tokens than one
-session. See [Benchmark](#benchmark).*
+(0.53 vs 1.02, on a busier shared endpoint). With cloud CLI players (Claude Haiku, Luna low), v0.2.0's tables
+used 1.3-2.8x *more* tokens than one agent session; v0.2.1 keeps one CLI process per table, sends
+only the referee's delta on a return and runs the CLIs lean, and its tables use 0.43-0.63x the
+billable tokens of one session (Haiku hard: $0.015 vs $0.020), except Luna on the easy set
+(1.09x). See [Benchmark](#benchmark).*
 
 <details>
 <summary>Benchmark result card</summary>
 
-![benchmark card: easy set 6/6 vs 6/6, 33.0 vs 4.5 verified tasks per 100k tokens, 0.53 vs 1.02 per minute; hard set partial; Claude Haiku and Luna-low cloud players added: 8/8 on the hard set in both arms](docs/media/pingpong-result.png)
+![benchmark card: local Qwen easy set 6/6 vs 6/6, 33.0 vs 4.5 verified tasks per 100k tokens; Claude Haiku and Luna-low CLI players with v0.2.1: tables use 0.43-0.63x the billable tokens of one session (Luna easy 1.09x) and are faster in every pair](docs/media/pingpong-result.png)
 
 </details>
 
@@ -51,9 +53,10 @@ mechanism instead of a habit:
 
 - **Small, fresh contexts.** Each table is one ball for one player session. A worker does not
   carry the history of every other task; a return message carries only what failed (the
-  referee output, trimmed) and the server's note. Players that keep a session (Claude Code
-  `--resume`, Codex `exec resume`, a kept OpenAI-compatible conversation, a Halogen
-  keep/fork handle) reuse their prompt cache across rallies.
+  referee output, head and tail) and the server's note, never the brief again. Players that
+  keep a session (one Claude Code or Codex app-server process per table, a kept
+  OpenAI-compatible conversation, a Halogen keep/fork handle) reuse it and their prompt cache
+  across rallies.
 - **Verification outside the player.** The player never grades itself. Deterministic checks
   run first (exit codes, tests, files, HTTP status, JSON values); an LLM judge is a last
   resort, runs only after every deterministic check passed, and must be a different player.
@@ -107,29 +110,35 @@ Findings, stated plainly:
 
 The same sets with real agent CLIs as players, no local endpoint: Claude Code (`--model haiku`)
 and Codex (`-m gpt-5.6-luna`, reasoning effort low). A is one CLI session over all tasks (it
-edits, runs the tests itself, says DONE); B is one table per task, parallel 3, effort ladder,
-session resumed on a returned ball. One run per arm; tokens are what each CLI reports (input
-includes cache reads). Local Qwen stays the reference.
+edits, runs the tests itself, says DONE); B is one table per task, parallel 3, effort ladder.
+One run per arm. **Billable tokens** = fresh input + output + cache reads x 0.1 (what the
+providers bill); Claude also reports dollars.
 
-| Set | Player | A: verified, wall, tokens | B tables: verified, wall, tokens |
-| --- | --- | --- | --- |
-| Easy (6) | Haiku | 6/6, 36 s, 101k, $0.009 | 6/6, 30 s, 145k, $0.008 |
-| Easy (6) | Luna low | 6/6, 33 s, 120k | 6/6, 34 s, 337k |
-| Hard (8) | Haiku | 8/8, 79 s, 255k, $0.019 | 8/8, 63 s, 407k, $0.046 |
-| Hard (8) | Luna low | 8/8, 53 s, 325k | 8/8, 47 s, 436k |
+v0.2.0 lost on tokens: every rally was a fresh CLI invocation that re-sent the CLI's system
+prompt and 10-25k tokens of tool and MCP schemas, the agent re-did inside each rally what the
+table already does (read the file it was sent, run the tests), and the count mixed cache reads
+with fresh input: B used 1.3-2.8x A's tokens (Haiku hard $0.046 vs $0.019). v0.2.1 fixed the
+carry (one process per table, delta-only returns, lean CLI context, `tools = []` and a short
+`system_prompt` for a player whose answer the table writes):
 
-- **Both cloud players verified every task in both arms; the sets do not separate the arms on
-  correctness for them**, and neither A run claimed DONE falsely. The local Qwen hard-set gap
-  (1/8) is a model-capability and token-budget result, not something tables fix.
-- **Tables lose on tokens and cost** with agent CLIs: every rally is a fresh invocation that
-  re-sends the CLI's system prompt and re-reads the stubs, so B used 1.3-2.8x the tokens of A
-  (verified per 100k tokens: Haiku hard 3.1 for A vs 2.0 for B; Luna easy 5.0 vs 1.8) and Haiku's
-  hard-set cost was 2.4x. Tables win modestly on wall time (parallel tables: 63 s vs 79 s, 47 s vs
-  53 s; a tie on Luna easy) and the referee returned a ball four times (Luna easy `calc`, Luna
-  hard `bankround`, Haiku hard `isoweek` and `jsonptr`), each fixed on the next rally in the same
-  resumed session. Where one strong session already tests itself and gets everything right, the
-  single loop is the cheaper arm; tables pay off with weaker or untrusted players, many
-  independent tasks, or when you need an independent verdict.
+| Set | Player | A one session: verified, wall, billable, cost | B tables: verified, wall, billable, cost | B / A billable |
+| --- | --- | --- | --- | --- |
+| Easy (6) | Haiku | 6/6, 33 s, 29.3k, $0.0073 | 6/6, 17 s, 18.4k, $0.0065 | 0.63x |
+| Easy (6) | Luna low | 6/6, 29 s, 22.5k | 6/6, 21 s, 24.6k | **1.09x** |
+| Hard (8) | Haiku | 8/8, 93 s, 86.0k, $0.0203 | 8/8, 34 s, 41.1k, $0.0146 | 0.48x |
+| Hard (8) | Luna low | 7/8, 88 s, 76.6k | 8/8, 23 s, 33.2k | 0.43x |
+
+- **What each change bought** (Haiku hard, B billable): v0.2.0 config 121k -> persistent process
+  130k (no saving: the API re-sends the conversation either way; it saves start-up time) -> lean
+  context 92k -> no player tools 62k -> short system prompt 41k. For Codex the short prompt is the
+  decisive step: without it Luna still worked as a full agent inside each rally (151k, 2x A).
+- **Where tables still cost more:** Luna on the easy set (1.09x). Six small tasks, each table pays
+  its own first, uncached call, while A's single session re-reads a warm cache at a tenth of the
+  price. Haiku's dollar saving (0.72x hard, 0.88x easy) is smaller than its token saving because
+  output (a full file per answer) dominates B's bill.
+- Tables were faster in all four pairs, verified 8/8 where Luna's single session verified 7/8
+  (it said NOT DONE honestly), and the referee returned three balls that the player had claimed
+  done, each fixed on the next rally in the same session.
 - Cloud A is not comparable to the Qwen A (a full agent with its own tool loop on much faster
   hardware); read these as a second reference, not a speed-up claim.
 
@@ -249,13 +258,52 @@ Examples: [fix a failing test](examples/fix-failing-test.toml),
 | `shell` | any command | ball on stdin, answer on stdout; `UPP_RALLY`, `UPP_TABLE`, `UPP_SESSION`, `UPP_CWD` in env | none (brief repeated in returns) | **tested** (CI) |
 | `openai` | any OpenAI-compatible `/chat/completions` | conversation kept in memory; optional `X-Halogen-Keep`/`X-Halogen-From` | yes | **tested live** (Halogen, Qwen 3.8) |
 | `openunum` | OpenUnum HTTP API | `POST /api/chat {sessionId, message}`, polls `/api/chat/pending` | yes (one OpenUnum session per table) | API checked against OpenUnum source; not run live |
-| `claude` | Claude Code | `claude -p --output-format json`, prompt on stdin | `--resume <session_id>` | flags verified (2.1.303 `--help`); not run live |
-| `codex` | OpenAI Codex CLI | `codex exec --json --skip-git-repo-check -o FILE -` | `codex exec resume <thread_id>` | flags verified (0.160.0); event names checked; not run live |
+| `claude` | Claude Code | one `claude -p --input-format stream-json --output-format stream-json` process per table, a user message per rally (`persistent = false`: `claude -p --output-format json` per rally) | same process; `--resume <session_id>` after a restart or an effort change | **run live** (2.1.303, Haiku: cloud benchmark) |
+| `codex` | OpenAI Codex CLI | one `codex app-server` per table, a `turn/start` per rally on one thread (`persistent = false` or exec-only args: `codex exec --json ... -` per rally) | same thread; `thread/resume` / `exec resume <thread_id>` after a restart | **run live** (0.160.0, gpt-5.6-luna: cloud benchmark) |
 | `gemini` | Gemini CLI | `gemini -o json --session-id UUID -p BALL` | `--resume <UUID>` (per project dir) | flags verified (0.45.1); output and resume checked against its source; not run live |
 | `opencode` | opencode | `opencode run --format json MESSAGE` | `-s <sessionID>` | flags verified (1.18.33); event schema checked against its source; not run live |
 
+### Using UnumSearch from players
+
+[UnumSearch](https://github.com/corpunum/unumsearch) is a fast indexed code search (CLI, daemon
+and MCP server). It is off by default; the lean default stays lean.
+
+- **Agent CLI players** (`claude`, `codex`): `search = "unumsearch"` (or a path to the binary)
+  attaches the UnumSearch MCP server and only that one. Claude Code gets
+  `--mcp-config '{"mcpServers":{"unumsearch":{"type":"stdio","command":"unumsearch","args":["mcp"]}}}'
+  --strict-mcp-config --allowedTools mcp__unumsearch__search,mcp__unumsearch__find_files,mcp__unumsearch__index_status`
+  (all three tools are read-only); Codex gets `-c mcp_servers.unumsearch.command="unumsearch"
+  -c mcp_servers.unumsearch.args=["mcp"] -c mcp_servers.unumsearch.enabled=true` while lean mode
+  keeps every other MCP server off. Works with `tools = []`: search is then the player's only tool.
+- **Chat players without a tool loop** (`openai`, a local model): the engine searches for them
+  before rally 1, in the table's cwd (its worktree, if any), and puts the top hits into the ball.
+  `{{search:query}}` in a ball is replaced by a block of hits for that literal query;
+  `context_search = ["query", ...]` on a table adds a "Code search results" section. Each query
+  keeps 8 hits as `path:line: text` (paths relative to the cwd, lines cut at 200 characters,
+  2 KB per query). The binary is `unumsearch` on PATH or `$UPP_UNUMSEARCH`; a failed search is a
+  one-line note in the ball, never a failed table.
+
+```toml
+[[table]]
+name = "fix-parse"
+cwd = "repo"
+ball = "Fix the off-by-one in the line parser. Callers: {{search:parse_line(}}"
+context_search = ["struct LineParser", "fn parse_line"]
+player = { kind = "openai", base_url = "http://127.0.0.1:8080/v1", model = "local" }
+
+[[table]]
+name = "fix-parse-agent"
+cwd = "repo"
+ball = "Fix the off-by-one in the line parser."
+player = { kind = "claude", model = "haiku", tools = ["Read", "Edit", "Bash"], search = "unumsearch" }
+```
+
 Every agent CLI must exit 0 and report no error event (`is_error`, codex `turn.failed`/`error`,
 gemini `error`, opencode `error`); otherwise the rally is a fault and the ball is served again.
+`claude` and `codex` players are lean by default (no MCP servers, user settings, skills,
+memory or extra feature tools) and take `tools` and `system_prompt`; see
+[docs/integrations/claude-code.md](docs/integrations/claude-code.md) and
+[docs/integrations/codex.md](docs/integrations/codex.md).
 "Not run live" means no model turn was paid for while building v0.1: the argv is unit-tested and
 the output parsers are tested on the documented shapes. Details and caveats per tool in
 [docs/integrations](docs/integrations/README.md). Agent CLIs edit files with **your** permissions
@@ -422,7 +470,8 @@ card = true                # ask for a <card> block (default true)
 max_depth = 3              # deepest sub-table depth (default 3)
 worktree = { repo = "..", base = "main", branch = "upp/fix", path = "/tmp/wt/fix" }
 unverified = false         # true only for a table with no referee checks (its point is marked UNVERIFIED)
-player = { kind = "claude", model = "sonnet", args = [], timeout_secs = 900, resume = true, env = {} }
+player = { kind = "claude", model = "sonnet", args = [], timeout_secs = 900, resume = true, env = {}, persistent = true, lean = true }
+# claude/codex also: tools = ["Read", "Edit"] ([] = none), system_prompt = "replaces the CLI's own"
 # openai: { kind = "openai", base_url, model, api_key_env, system, temperature, max_tokens, reasoning_effort, halogen_keep, extra }
 server = { mode = "external", review_points = true, timeout_secs = 3600, note = "standing instruction", transcript = false }
 referee = [

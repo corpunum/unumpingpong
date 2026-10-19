@@ -191,7 +191,7 @@ impl Orchestrator {
             calls += 1;
             let decisions = match player.play(&msg, &ctx) {
                 Ok(r) => {
-                    let share = (r.tokens_in + r.tokens_out) / batch.len() as u64;
+                    let share = r.billable() / batch.len() as u64;
                     for p in &batch {
                         store.add_server_tokens(&p.table_id, share)?;
                     }

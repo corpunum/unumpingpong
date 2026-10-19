@@ -176,6 +176,29 @@ pub struct AgentCli {
     pub resume: Option<bool>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub env: BTreeMap<String, String>,
+    /// Claude Code and Codex: one long-lived process per table, rallies sent as new turns
+    /// (`claude --input-format stream-json`, `codex app-server`) instead of one invocation
+    /// per rally. Default true; falls back to the per-rally resume path when unavailable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub persistent: Option<bool>,
+    /// Claude Code and Codex: drop context a coding player does not need (MCP servers, user
+    /// settings, skills/plugins, memory, extra feature tools). Default true.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lean: Option<bool>,
+    /// Built-in tools the player may use. Claude Code: `--tools` (`[]` = none, e.g. when
+    /// `apply` writes the answer and the referee runs the tests). Codex: `[]` turns its shell
+    /// tools off; other lists leave its tools as they are. Default: the tool's own set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tools: Option<Vec<String>>,
+    /// Replace the tool's own system prompt (Claude `--system-prompt`; Codex base
+    /// instructions). Default: keep it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub system_prompt: Option<String>,
+    /// Claude Code and Codex: code search for the player. `"unumsearch"` (or a path to the
+    /// `unumsearch` binary) attaches the UnumSearch MCP server, and only that one, so a lean
+    /// player stays lean. Off by default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub search: Option<String>,
 }
 
 /// A player (worker) or a model server / judge. Selected by `kind`.
@@ -401,7 +424,8 @@ pub struct TableSpec {
     #[serde(default)]
     pub goal: String,
     /// The first ball (the brief). Templates: `{{goal}}`, `{{prev.answer}}`, `{{prev.name}}`,
-    /// `{{file:path}}` (a file's content, read from `cwd` after `setup`).
+    /// `{{file:path}}` (a file's content, read from `cwd` after `setup`), `{{search:query}}`
+    /// (the top `unumsearch` hits for a literal query in `cwd`).
     #[serde(default)]
     pub ball: String,
     /// Serial chaining: start only after the named table scored its point.
@@ -440,6 +464,11 @@ pub struct TableSpec {
     /// Deepest nesting this table's sub-tables may reach (absolute depth). Default 3.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_depth: Option<u32>,
+    /// Code searches run with `unumsearch` in the table's cwd before rally 1; the top hits
+    /// (path:line and the line) are added to the brief. For players without a tool loop
+    /// (chat models): they get the relevant code without tools. See also `{{search:...}}`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub context_search: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]

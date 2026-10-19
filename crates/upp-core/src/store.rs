@@ -101,8 +101,11 @@ pub struct RallyRow {
     /// `point`, `return` or `fault`.
     pub verdict: String,
     pub note: String,
+    /// Fresh (uncached) input tokens.
     pub tokens_in: u64,
     pub tokens_out: u64,
+    /// Input tokens read from the provider's prompt cache.
+    pub tokens_cached: u64,
     pub cost_usd: f64,
     pub session: Option<String>,
     pub started_ms: i64,
@@ -205,9 +208,11 @@ const V2_TABLE_COLUMNS: &[(&str, &str, &str)] = &[
     ("tables", "resumes", "INTEGER NOT NULL DEFAULT 0"),
     ("tables", "worktree_json", "TEXT"),
     ("rallies", "provenance_json", "TEXT"),
+    // v0.2.1: cache reads apart from fresh input.
+    ("rallies", "tokens_cached", "INTEGER NOT NULL DEFAULT 0"),
 ];
 
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 
 const TABLE_COLS: &str = "id, run_id, name, goal, status, phase, player, after_id, created_ms, \
     started_ms, ended_ms, rallies, max_rallies, wall_secs, tokens, cost_usd, session, trail, \
@@ -272,6 +277,7 @@ fn rally_from_row(r: &rusqlite::Row) -> rusqlite::Result<RallyRow> {
             .get::<_, Option<String>>(15)?
             .and_then(|s| serde_json::from_str(&s).ok())
             .unwrap_or(Value::Null),
+        tokens_cached: r.get::<_, i64>(16)? as u64,
     })
 }
 
@@ -289,7 +295,7 @@ fn card_from_row(r: &rusqlite::Row) -> rusqlite::Result<CardRow> {
 }
 
 const RALLY_COLS: &str = "id, table_id, n, ball, answer, checks_json, passed, verdict, note, \
-    tokens_in, tokens_out, cost_usd, session, started_ms, ended_ms, provenance_json";
+    tokens_in, tokens_out, cost_usd, session, started_ms, ended_ms, provenance_json, tokens_cached";
 
 type R<T> = Result<T, String>;
 fn e(x: rusqlite::Error) -> String {
@@ -908,8 +914,8 @@ impl Store {
         self.conn
             .execute(
                 "INSERT INTO rallies (table_id, n, ball, answer, checks_json, passed, verdict, note, \
-                 tokens_in, tokens_out, cost_usd, session, started_ms, ended_ms, provenance_json) \
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15)",
+                 tokens_in, tokens_out, cost_usd, session, started_ms, ended_ms, provenance_json, \
+                 tokens_cached) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)",
                 params![
                     r.table_id,
                     r.n,
@@ -929,7 +935,8 @@ impl Store {
                         None
                     } else {
                         Some(r.provenance.to_string())
-                    }
+                    },
+                    r.tokens_cached as i64
                 ],
             )
             .map_err(e)?;
@@ -953,7 +960,7 @@ impl Store {
             .conn
             .prepare(
                 "SELECT r.id, r.table_id, r.n, r.ball, r.answer, r.checks_json, r.passed, r.verdict, r.note, \
-                 r.tokens_in, r.tokens_out, r.cost_usd, r.session, r.started_ms, r.ended_ms, r.provenance_json \
+                 r.tokens_in, r.tokens_out, r.cost_usd, r.session, r.started_ms, r.ended_ms, r.provenance_json, r.tokens_cached \
                  FROM rallies r JOIN tables t ON t.id = r.table_id WHERE (?1 IS NULL OR t.run_id = ?1) ORDER BY r.id",
             )
             .map_err(e)?;
@@ -1203,6 +1210,7 @@ ball = "z"
             note: String::new(),
             tokens_in: 3,
             tokens_out: 4,
+            tokens_cached: 5,
             cost_usd: 0.0,
             session: Some("s".into()),
             started_ms: 1,
@@ -1216,6 +1224,7 @@ ball = "z"
         assert_eq!(rs.len(), 1);
         assert_eq!(rs[0].checks, json!([{"pass": true}]));
         assert_eq!(rs[0].provenance, json!({"git": false}));
+        assert_eq!(rs[0].tokens_cached, 5);
         // finish() appended the table's final card.
         let fc = s.latest_card(&ids[0], "final").unwrap().unwrap();
         assert_eq!(fc.card["status"], "point");

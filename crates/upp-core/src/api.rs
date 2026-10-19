@@ -152,7 +152,7 @@ pub fn status(store: &Store, id: &str, full: bool) -> Result<Value, String> {
                 "n": r.n, "verdict": r.verdict, "passed": r.passed,
                 "card": card,
                 "note": proc::head(&r.note, 600),
-                "tokens": r.tokens_in + r.tokens_out, "cost_usd": r.cost_usd,
+                "tokens": crate::player::billable(r.tokens_in, r.tokens_cached, r.tokens_out), "cost_usd": r.cost_usd,
                 "duration_s": (r.ended_ms - r.started_ms) as f64 / 1000.0,
                 "tree": r.provenance["tree"],
             });
@@ -214,7 +214,7 @@ pub fn transcript(store: &Store, id: &str, rally: Option<u32>) -> Result<Value, 
         .map(|r| {
             json!({
                 "n": r.n, "ball": r.ball, "answer": r.answer, "checks": r.checks, "passed": r.passed,
-                "verdict": r.verdict, "note": r.note, "tokens_in": r.tokens_in, "tokens_out": r.tokens_out,
+                "verdict": r.verdict, "note": r.note, "tokens_in": r.tokens_in, "tokens_cached": r.tokens_cached, "tokens_out": r.tokens_out,
                 "session": r.session, "provenance": r.provenance,
                 "started_ms": r.started_ms, "ended_ms": r.ended_ms,
             })
@@ -565,7 +565,9 @@ pub fn export_jsonl(store: &Store, run: Option<&str>) -> Result<String, String> 
             "verdict": r.verdict,
             "server_note": r.note,
             "tokens_in": r.tokens_in,
+            "tokens_cached": r.tokens_cached,
             "tokens_out": r.tokens_out,
+            "billable_tokens": crate::player::billable(r.tokens_in, r.tokens_cached, r.tokens_out),
             "cost_usd": r.cost_usd,
             "session": r.session,
             "provenance": r.provenance,

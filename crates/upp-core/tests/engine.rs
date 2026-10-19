@@ -468,7 +468,7 @@ echo '{"type":"turn.failed","error":{"message":"stream disconnected before compl
 name = "codex"
 ball = "x"
 lease = {{ max_rallies = 1 }}
-player = {{ kind = "codex", bin = "{bin}" }}
+player = {{ kind = "codex", bin = "{bin}", persistent = false }}
 referee = [{{ kind = "command", run = "grep -qx 42 answer.txt" }}]
 "#
     );
