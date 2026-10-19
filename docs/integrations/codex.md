@@ -24,7 +24,9 @@ codex exec resume --json --skip-git-repo-check -o <tmpfile> [-m M] <args...> <th
 
 The thread id comes from the `thread.started` event, tokens from `turn.completed.usage`, the
 answer from the `-o/--output-last-message` file (fallback: the last `agent_message` item).
-`turn.failed` / `error` events become a fault.
+`turn.failed` / `error` events become a fault, even when an agent message (or the `-o` file)
+was produced first. A nonzero exit status is a fault for every agent CLI (claude, codex,
+gemini, opencode), whatever it printed.
 
 **Status: flags verified** against codex-cli 0.160.0 (`codex exec --help`,
 `codex exec resume --help`); event names (`thread.started`, `turn.completed`, `item.completed`,

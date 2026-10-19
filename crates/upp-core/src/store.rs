@@ -768,6 +768,7 @@ mod tests {
         let m = MatchFile::parse(
             r#"
 [defaults]
+unverified = true
 player = { kind = "shell", command = "cat" }
 [[table]]
 name = "a"

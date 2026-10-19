@@ -173,6 +173,8 @@ Examples: [fix a failing test](examples/fix-failing-test.toml),
 | `gemini` | Gemini CLI | `gemini -o json --session-id UUID -p BALL` | `--resume <UUID>` (per project dir) | flags verified (0.45.1); output and resume checked against its source; not run live |
 | `opencode` | opencode | `opencode run --format json MESSAGE` | `-s <sessionID>` | flags verified (1.18.33); event schema checked against its source; not run live |
 
+Every agent CLI must exit 0 and report no error event (`is_error`, codex `turn.failed`/`error`,
+gemini `error`, opencode `error`); otherwise the rally is a fault and the ball is served again.
 "Not run live" means no model turn was paid for while building v0.1: the argv is unit-tested and
 the output parsers are tested on the documented shapes. Details and caveats per tool in
 [docs/integrations](docs/integrations/README.md). Agent CLIs edit files with **your** permissions
@@ -190,7 +192,12 @@ answer's first fenced code block to that file before the referee runs, and
 | `file_exists` | the file exists (and matches `contains`) | `path` relative to the table cwd |
 | `http_ok` | GET answers 2xx (or exactly `status`), body matches `expect_regex` | `url`, `timeout_secs` |
 | `json_path_equals` | value at `path` (`a.b.0.c`) equals `equals` | source: `file`, `url`, or the answer itself (first JSON block) |
-| `judge` | an LLM player replies `PASS ...` | `player` (must differ from the table's player), `rubric`; runs last, only if every deterministic check passed |
+| `judge` | an LLM player replies with the word `PASS` first | `player` (must differ from the table's player), `rubric`; runs last, only if every deterministic check passed |
+
+A table needs at least one check: an empty referee never passes, and `upp validate` rejects such
+a table. For a step that really has nothing to verify, set `unverified = true` on the table (or
+in `[defaults]`); its point is then recorded as `UNVERIFIED point on rally N` with an
+`unverified` check row, so it is never mistaken for a verified one.
 
 On failure, the return message lists the failed checks with the tail of their output (6 KB per
 check), the server note, and "fix it and answer again". The first ball tells the player which
@@ -199,8 +206,10 @@ checks will run, so it knows the evidence expected.
 ## Server modes
 
 - `auto` (default): referee pass = point; fail = return with the referee output.
-- `model`: `server.player` writes the correction note (and, with `review_points = true`, must say
-  `ACCEPT` before a passing ball scores). If the server model fails, the referee still decides.
+- `model`: `server.player` writes the correction note (and, with `review_points = true`, must
+  answer with the word `ACCEPT` first before a passing ball scores). Fail closed: if that review
+  call fails, it is retried (3 attempts), then the table ends as `error`, never as a point. A
+  failing server call on a ball the referee failed only drops the note.
 - `external`: every ball waits in the server queue for `accept`, `return` (with a note) or
   `stop`, sent by `ball_answer` (MCP), `POST /api/tables/{id}/answer`, `upp answer`, or the `a`/`r`
   keys in `upp watch`. `accept` scores only if the referee passed: the referee decides, the
@@ -232,6 +241,7 @@ cwd = "work/x"             # created if missing
 setup = "cp -R ../fixture/. ."   # run once in cwd before rally 1; failure = error
 apply = { write_file = "src/lib.rs", from = "code_block" }   # or from = "answer"
 lease = { wall_secs = 600, max_rallies = 4, max_tokens = 200000, max_cost_usd = 1.5 }
+unverified = false         # true only for a table with no referee checks (its point is marked UNVERIFIED)
 player = { kind = "claude", model = "sonnet", args = [], timeout_secs = 900, resume = true, env = {} }
 server = { mode = "external", review_points = true, timeout_secs = 3600, note = "standing instruction" }
 referee = [

@@ -51,6 +51,9 @@ Referee checks: `command` (`run`, `expect_regex`, `timeout_secs`), `file_exists`
 `contains`), `http_ok` (`url`, `status`), `json_path_equals` (`path`, `equals`, `file`/`url`/the
 answer), `judge` (`player` different from the table's, runs last).
 
+Every table needs at least one referee check; a table without one is rejected unless it sets
+`unverified = true`, and then its point is marked UNVERIFIED. Prefer a real check.
+
 Brief well: state the goal, the files, the constraints ("do not change the tests"), and what
 "done" means. Keep it small: the referee output carries the details on a return.
 

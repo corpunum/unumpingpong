@@ -61,6 +61,17 @@ impl Verdict {
     }
 }
 
+/// First word of a reply, upper-cased, ignoring markdown decoration (`**PASS**`, `# FAIL`).
+/// `PASSED` or `PASSABLE` is not `PASS`.
+pub fn first_word(text: &str) -> String {
+    text.trim_start()
+        .trim_start_matches(['*', '#', '`', '"', '\'', ' ', '>', '_'])
+        .chars()
+        .take_while(|c| c.is_ascii_alphabetic())
+        .collect::<String>()
+        .to_ascii_uppercase()
+}
+
 pub struct RefCtx<'a> {
     pub table_id: &'a str,
     pub rally: u32,
@@ -92,17 +103,37 @@ fn answer_file(ctx: &RefCtx) -> Option<PathBuf> {
     Some(p)
 }
 
+/// The verdict of a table that opted in to `unverified = true` and has no checks: it
+/// passes, and the check row says plainly that nothing was verified.
+pub fn unverified() -> Verdict {
+    Verdict {
+        passed: true,
+        checks: vec![CheckResult {
+            name: "unverified".into(),
+            kind: "unverified".into(),
+            pass: true,
+            skipped: false,
+            summary:
+                "UNVERIFIED: no referee checks (unverified = true); this point carries no evidence"
+                    .into(),
+            output: String::new(),
+            duration_ms: 0,
+        }],
+    }
+}
+
 /// Run every check. Deterministic checks run in order; judges run only if all of them passed.
+/// An empty check list fails: a point always needs evidence (see [`unverified`] for the opt-in).
 pub fn referee(checks: &[CheckSpec], ctx: &RefCtx) -> Verdict {
     if checks.is_empty() {
         return Verdict {
-            passed: true,
+            passed: false,
             checks: vec![CheckResult {
                 name: "none".into(),
                 kind: "none".into(),
-                pass: true,
+                pass: false,
                 skipped: false,
-                summary: "no referee checks configured: the answer is accepted as is".into(),
+                summary: "no referee checks configured: nothing verifies this answer".into(),
                 output: String::new(),
                 duration_ms: 0,
             }],
@@ -339,12 +370,7 @@ fn run_check(c: &CheckSpec, ctx: &RefCtx, ans_file: Option<&Path>) -> CheckResul
             match player::build(spec, &pctx).and_then(|mut p| p.play(&prompt, &pctx)) {
                 Err(e) => (false, format!("judge error: {e}"), String::new()),
                 Ok(r) => {
-                    let first = r
-                        .text
-                        .trim_start()
-                        .trim_start_matches(['*', '#', '`', '"', ' '])
-                        .to_ascii_uppercase();
-                    let pass = first.starts_with("PASS");
+                    let pass = first_word(&r.text) == "PASS";
                     (
                         pass,
                         format!("judge says {}", if pass { "PASS" } else { "FAIL" }),
@@ -427,6 +453,21 @@ mod tests {
                 env: BTreeMap::new(),
             },
         }
+    }
+
+    #[test]
+    fn no_checks_never_pass_and_judge_words_are_strict() {
+        let d = std::env::temp_dir();
+        let v = referee(&[], &ctx(&d, "I did it, trust me"));
+        assert!(!v.passed, "an empty check list must not pass");
+        assert!(!v.checks[0].pass);
+        let u = unverified();
+        assert!(u.passed && u.checks[0].summary.contains("UNVERIFIED"));
+        assert_eq!(first_word("**PASS** looks right"), "PASS");
+        assert_eq!(first_word("> pass: ok"), "PASS");
+        assert_ne!(first_word("PASSED? no, FAIL"), "PASS");
+        assert_ne!(first_word("Passable but FAIL"), "PASS");
+        assert_eq!(first_word("FAIL because"), "FAIL");
     }
 
     #[test]
