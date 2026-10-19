@@ -3,7 +3,9 @@
 """Render docs/media/pingpong-result.png from bench/results.json (needs Pillow).
 
 One panel per task set; the bars are the headline metrics (verified tasks per minute and per
-100k tokens) plus verified tasks, wall time and tokens, for every arm that ran."""
+100k billable tokens) plus verified tasks, wall time and billable tokens, for every arm that ran.
+Billable = fresh input + output + cache reads at 0.1 (the local Qwen endpoint reports no cache,
+so its tokens are prompt + completion)."""
 import json, os
 from PIL import Image, ImageDraw, ImageFont
 
@@ -22,13 +24,14 @@ sets = [(k, v) for k, v in r["sets"].items() if any(a in v for a in "BC")]
 for _, v in sets:
     for lab, arms in v.get("cloud", {}).items():
         for arm, x in arms.items():
-            v[f"{lab}:{arm}"] = x
+            if arm in ("A", "B"):
+                v[f"{lab}:{arm}"] = x
 W = 1200
 rows = [("verified tasks", lambda x: x["points"], lambda x: f"{x['points']}/{x['tasks']}"),
         ("verified / minute", lambda x: x["verified_per_min"], lambda x: f"{x['verified_per_min']:.2f}"),
-        ("verified / 100k tokens", lambda x: x["verified_per_100k_tokens"], lambda x: f"{x['verified_per_100k_tokens']:.1f}"),
+        ("verified / 100k billable", lambda x: x["verified_per_100k_tokens"], lambda x: f"{x['verified_per_100k_tokens']:.1f}"),
         ("wall time", lambda x: x["wall_s"], lambda x: f"{x['wall_s']:.0f} s"),
-        ("tokens", lambda x: x["tokens"], lambda x: f"{x['tokens']:,}")]
+        ("billable tokens", lambda x: x["tokens"], lambda x: f"{x['tokens']:,}" + (f"  ${x['cost_usd']:.3f}" if x.get("cost_usd") else ""))]
 ORDER = ["A", "B", "C", "haiku:A", "haiku:B", "luna-low:A", "luna-low:B"]
 arms_of = lambda s: [a for a in ORDER if a in s]
 bar_sets = [(k, v) for k, v in sets if len(arms_of(v)) >= 2]
@@ -36,7 +39,7 @@ text_sets = [(k, v) for k, v in sets if len(arms_of(v)) < 2]
 Hh = 190 + sum(60 + len(rows) * (14 + 26 * len(arms_of(s))) for _, s in bar_sets) + 150 * len(text_sets) + 50
 im = Image.new("RGB", (W, Hh), BG); d = ImageDraw.Draw(im)
 d.text((40, 26), "UnumPingPong vs a single agent loop", font=f(30, True), fill=FG)
-d.text((40, 70), f"local Qwen (reference) vs Claude Haiku and Luna-low CLI players; unit tests as the referee, one run per arm",
+d.text((40, 70), f"local Qwen (reference) vs Claude Haiku and Luna-low CLI players (v0.2.1: persistent, lean); unit tests as the referee",
        font=f(16), fill=DIM)
 x = 40; ly = 100
 for a in ORDER:
@@ -76,6 +79,8 @@ for name, s in text_sets:
     for l in lines:
         d.text((60, y), "- " + l, font=f(16), fill=FG); y += 26
     y += 20
+d.text((40, Hh - 62), "Cloud tables vs one session: v0.2.0 used 1.3-2.8x the tokens; v0.2.1 0.43-0.63x the billable tokens (Luna easy 1.09x)",
+       font=f(14), fill=FG)
 d.text((40, Hh - 40), "Wall times differ in endpoint load between runs; details and caveats: bench/results.md",
        font=f(14), fill=DIM)
 im.save(os.path.join(H, "..", "docs", "media", "pingpong-result.png"))

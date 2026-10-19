@@ -9,27 +9,67 @@ model = "sonnet"                                   # optional: --model
 args = ["--permission-mode", "acceptEdits"]        # Claude Code's own permission flags
 timeout_secs = 900                                 # per rally (also bounded by the wall lease)
 resume = true                                      # default
+persistent = true                                  # default: one process per table
+lean = true                                        # default: no MCP, settings, skills
+# tools = []                                       # --tools; [] = none (apply writes the file)
+# system_prompt = "You are ..."                    # --system-prompt (replaces Claude Code's)
 ```
 
-Each rally runs, in the table's `cwd`:
+**Persistent (default).** One process per table, in the table's `cwd`; every rally is a new
+user message on its stdin:
 
 ```bash
-claude -p --output-format json [--model M] [--resume <session_id>] <args...>   # ball on stdin
+claude -p --input-format stream-json --output-format stream-json --verbose \
+       [--model M] [--effort E] [--resume <session_id>] <lean flags> [--tools T] [--system-prompt P] <args...>
+# stdin, one line per rally: {"type":"user","message":{"role":"user","content":"<ball>"}}
 ```
 
-The JSON result gives the answer (`result`), the `session_id` (passed back with `--resume` on the
-next rally, so Claude keeps its context and prompt cache), `usage` (input + cache + output
-tokens, counted against `max_tokens`) and `total_cost_usd` (counted against `max_cost_usd`).
-`is_error: true` or a nonzero exit is recorded as a fault and the ball is served again. A stop
-kills the `claude` process group at once.
+Each rally ends at the `result` line: the answer (`result`), the `session_id`, `usage` and
+`total_cost_usd` (cumulative per process; the adapter records the difference per rally).
+`--effort` is per process, so a rally with a different effort (an effort ladder) restarts the
+process with `--resume` on the same session; the conversation and the prompt cache carry over.
+A process that dies, times out or is stopped is restarted with `--resume` on the next rally. If
+the stream mode is unavailable (the process ends before printing anything), the table falls back
+to the per-rally path below; the `player_mode` event records which mode ran.
 
-**Status: flags verified** against Claude Code 2.1.303 `--help` (`-p/--print`,
-`--output-format json`, `--resume`, `--model`, `--permission-mode`); the result parser is tested
-on the documented result object. **Verified live** (2026-10-19, Haiku 5.5 on a Max plan): multi-rally runs of the benchmark with `--model haiku` resumed the session (`--resume`, same session id across rallies), parsed usage and `total_cost_usd`, and the per-rally `effort` ladder is forwarded as `--effort low|medium|high` (added after that run: the adapter ignored `effort` for Claude before). See `bench/results.md`.
+**Per rally** (`persistent = false`, or the fallback): each rally runs
+
+```bash
+claude -p --output-format json [--model M] [--resume <session_id>] <lean flags> <args...>   # ball on stdin
+```
+
+**Lean flags** (`lean = true`, the default): `--strict-mcp-config` (no MCP servers),
+`--setting-sources ""` (no user/project/local settings: hooks, permissions allowlists, env),
+`--disable-slash-commands` (no skills), and `--exclude-dynamic-system-prompt-sections` (cwd and
+git status move to the first message, so all tables share one cached system prompt; not with
+`system_prompt`). A flag already in `args` is not added twice. Set `lean = false` when the player
+needs your settings (e.g. an `env` that routes Claude Code through a proxy). Measured with
+Haiku on this machine, one "reply hi" call: 15.3k input tokens with the default tool set,
+3.6k with `tools = []`, 0.6k with `tools = []` and a one-line `system_prompt`.
+
+**Tokens.** `usage.input_tokens + cache_creation_input_tokens` is recorded as fresh input,
+`cache_read_input_tokens` as cached input, `output_tokens` as output, `total_cost_usd` as cost.
+Tables, cards and `max_tokens` count *billable* tokens: fresh input + output + cache reads at
+0.1. `is_error: true` or a nonzero exit is recorded as a fault and the ball is served again. A
+stop kills the `claude` process group at once.
+
+**Code search.** `search = "unumsearch"` attaches the UnumSearch MCP server, and only that one:
+`--mcp-config '{"mcpServers":{"unumsearch":{"type":"stdio","command":"unumsearch","args":["mcp"]}}}'`,
+`--strict-mcp-config` and `--allowedTools mcp__unumsearch__search,mcp__unumsearch__find_files,mcp__unumsearch__index_status`.
+Verified live (Haiku, `tools = []`): the player called `mcp__unumsearch__search` and answered with
+the right `path:line`. See "Using UnumSearch from players" in the README.
+
+**Status: flags verified** against Claude Code 2.1.303 `--help` (`--input-format stream-json`,
+`--output-format stream-json`, `--verbose`, `--resume`, `--effort`, `--tools`, `--system-prompt`,
+`--strict-mcp-config`, `--setting-sources`, `--disable-slash-commands`,
+`--exclude-dynamic-system-prompt-sections`). **Verified live** (2026-10-19, Haiku 5.5): two user
+messages over one process's stdin answered in one session (per-turn `usage`, cumulative
+`total_cost_usd`); the cloud benchmark ran with the persistent adapter (`bench/results.md`).
 
 Permissions: in `-p` mode Claude Code cannot ask you. Without an edit permission it answers but
 does not change files. Pick one: `--permission-mode acceptEdits`, `--allowedTools "Edit Bash(cargo test:*)"`,
-or (only in a disposable checkout) `--dangerously-skip-permissions`.
+or (only in a disposable checkout) `--dangerously-skip-permissions`. With `apply = { write_file
+= ... }` the player needs no tools at all: `tools = []`.
 
 ## As the orchestrator over MCP (cards_wait / card_answer)
 

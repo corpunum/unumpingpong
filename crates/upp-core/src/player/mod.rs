@@ -82,11 +82,30 @@ impl PlayCtx {
 #[derive(Serialize, Clone, Debug, Default, PartialEq)]
 pub struct Reply {
     pub text: String,
+    /// Fresh (uncached) input tokens, cache writes included.
     pub tokens_in: u64,
+    /// Input tokens read from the provider's prompt cache (billed at a discount).
+    pub tokens_cached: u64,
     pub tokens_out: u64,
+    /// Cost the tool reported for this call (0 when it reports none).
     pub cost_usd: f64,
     /// The tool's own session/thread id, when it reports one.
     pub session: Option<String>,
+}
+
+/// Cache reads are billed at about a tenth of fresh input by Anthropic and OpenAI.
+pub const CACHED_WEIGHT: f64 = 0.1;
+
+/// Billable tokens: fresh input + output + cache reads at their discount. The token count
+/// on tables, cards and leases.
+pub fn billable(tokens_in: u64, tokens_cached: u64, tokens_out: u64) -> u64 {
+    tokens_in + tokens_out + (tokens_cached as f64 * CACHED_WEIGHT).round() as u64
+}
+
+impl Reply {
+    pub fn billable(&self) -> u64 {
+        billable(self.tokens_in, self.tokens_cached, self.tokens_out)
+    }
 }
 
 pub trait Player: Send {
@@ -94,6 +113,11 @@ pub trait Player: Send {
     fn play(&mut self, ball: &str, ctx: &PlayCtx) -> Result<Reply, String>;
     /// True when the player remembers earlier rallies, so a return message need not repeat the brief.
     fn keeps_session(&self) -> bool;
+    /// How the player talks to its tool (e.g. "persistent (codex app-server)"), for the
+    /// table's events; empty when there is only one way.
+    fn mode(&self) -> String {
+        String::new()
+    }
     /// Crash recovery: rebuild the session from the recorded rallies (ball, answer) and the
     /// tool's session id. Returns true when the player now remembers them.
     fn restore(&mut self, _history: &[(String, String)], _session: Option<&str>) -> bool {

@@ -20,6 +20,7 @@ pub mod proc;
 pub mod referee;
 pub mod runner;
 pub mod scheduler;
+pub mod search;
 pub mod store;
 
 pub use config::{

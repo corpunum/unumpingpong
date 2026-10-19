@@ -257,7 +257,7 @@
     "block_cards_claiming_done": 6,
     "rallies_at_max_tokens": 0
    },
-   "cloud": {
+   "cloud_v020": {
     "haiku": {
      "A": {
       "arm": "A one agent session",
@@ -293,7 +293,12 @@
       "cli_model": "haiku",
       "effort": [],
       "date": "2026-10-19",
-      "endpoint_at_start": {}
+      "endpoint_at_start": {},
+      "tokens_total": 101311,
+      "fresh_input_tokens": 20431,
+      "cached_input_tokens": 72835,
+      "billable_tokens": 35760,
+      "version": "v0.2.0"
      },
      "B": {
       "arm": "B UnumPingPong tables",
@@ -372,7 +377,10 @@
       "player": "claude",
       "cli_model": "haiku",
       "date": "2026-10-19",
-      "endpoint_at_start": {}
+      "endpoint_at_start": {},
+      "tokens_total": 145409,
+      "billable_tokens": null,
+      "version": "v0.2.0"
      }
     },
     "luna-low": {
@@ -412,7 +420,12 @@
        "low"
       ],
       "date": "2026-10-19",
-      "endpoint_at_start": {}
+      "endpoint_at_start": {},
+      "tokens_total": 120487,
+      "fresh_input_tokens": 11781,
+      "cached_input_tokens": 105088,
+      "billable_tokens": 25908,
+      "version": "v0.2.0"
      },
      "B": {
       "arm": "B UnumPingPong tables",
@@ -491,6 +504,282 @@
       "tasks": 6,
       "player": "codex",
       "cli_model": "gpt-5.6-luna",
+      "date": "2026-10-19",
+      "endpoint_at_start": {},
+      "tokens_total": 337374,
+      "billable_tokens": null,
+      "version": "v0.2.0"
+     }
+    }
+   },
+   "cloud": {
+    "haiku": {
+     "A": {
+      "arm": "A one agent session",
+      "points": 6,
+      "per_task": {
+       "calc": true,
+       "duration": true,
+       "intervals": true,
+       "lru": true,
+       "semver": true,
+       "wrap": true
+      },
+      "turns": 12,
+      "max_turns": null,
+      "shell_runs": null,
+      "wall_s": 33.2,
+      "fresh_input_tokens": 14418,
+      "cached_input_tokens": 75896,
+      "completion_tokens": 7300,
+      "prompt_tokens": 90314,
+      "tokens_total": 97614,
+      "billable_tokens": 29308,
+      "tokens": 29308,
+      "cost_usd": 0.0073,
+      "lean": true,
+      "declared_done": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "claimed_done_but_failed": false,
+      "failed_when_claimed_done": 0,
+      "final_message_tail": "ntervals, lru, semver, and wrap. I only edited `solution.py` in each folder and left the tests untouched.\n\nTwo semver bugs showed up on the first run: leading zeros in the core version were accepted, and a prerelease was compared as higher than the release. Both are fixed and the suite passes.\n\nDONE",
+      "stderr_tail": "",
+      "verified_per_min": 10.843,
+      "verified_per_100k_tokens": 20.47,
+      "tasks": 6,
+      "player": "claude",
+      "cli_model": "haiku",
+      "effort": [],
+      "date": "2026-10-19",
+      "endpoint_at_start": {}
+     },
+     "B": {
+      "arm": "B UnumPingPong tables",
+      "points": 6,
+      "per_task": {
+       "calc": true,
+       "duration": true,
+       "intervals": true,
+       "lru": true,
+       "semver": true,
+       "wrap": true
+      },
+      "rallies": 6,
+      "faults": 0,
+      "wall_s": 17.4,
+      "effort": [
+       "low",
+       "medium",
+       "high"
+      ],
+      "parallel": "3",
+      "parallel_used": "3",
+      "fresh_input_tokens": 9106,
+      "cached_input_tokens": 0,
+      "completion_tokens": 9271,
+      "prompt_tokens": 9106,
+      "tokens_total": 18377,
+      "billable_tokens": 18377,
+      "tokens": 18377,
+      "cost_usd": 0.006456,
+      "player_tokens": 18377,
+      "orchestrator_tokens": 0,
+      "player_mode": [
+       "persistent (claude stream-json)"
+      ],
+      "cards_from_block": 6,
+      "rally_cards": 6,
+      "block_cards_claiming_done": 6,
+      "player_claimed_done_referee_failed": 0,
+      "rallies_at_max_tokens": 0,
+      "per_table": {
+       "duration": {
+        "rallies": 1,
+        "completion_tokens": [
+         872
+        ]
+       },
+       "intervals": {
+        "rallies": 1,
+        "completion_tokens": [
+         648
+        ]
+       },
+       "lru": {
+        "rallies": 1,
+        "completion_tokens": [
+         866
+        ]
+       },
+       "calc": {
+        "rallies": 1,
+        "completion_tokens": [
+         2987
+        ]
+       },
+       "semver": {
+        "rallies": 1,
+        "completion_tokens": [
+         2529
+        ]
+       },
+       "wrap": {
+        "rallies": 1,
+        "completion_tokens": [
+         1369
+        ]
+       }
+      },
+      "upp_stderr_tail": "",
+      "verified_per_min": 20.69,
+      "verified_per_100k_tokens": 32.65,
+      "tasks": 6,
+      "player": "claude",
+      "cli_model": "haiku",
+      "config": {
+       "persistent": true,
+       "lean": true,
+       "tools": "none",
+       "system_prompt": true
+      },
+      "date": "2026-10-19",
+      "endpoint_at_start": {}
+     }
+    },
+    "luna-low": {
+     "A": {
+      "arm": "A one agent session",
+      "points": 6,
+      "per_task": {
+       "calc": true,
+       "duration": true,
+       "intervals": true,
+       "lru": true,
+       "semver": true,
+       "wrap": true
+      },
+      "turns": null,
+      "max_turns": null,
+      "shell_runs": null,
+      "wall_s": 28.6,
+      "fresh_input_tokens": 14002,
+      "cached_input_tokens": 51200,
+      "completion_tokens": 3402,
+      "prompt_tokens": 65202,
+      "tokens_total": 68604,
+      "billable_tokens": 22524,
+      "tokens": 22524,
+      "cost_usd": null,
+      "lean": true,
+      "declared_done": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "claimed_done_but_failed": false,
+      "failed_when_claimed_done": 0,
+      "final_message_tail": "Implemented all six tasks and verified every test suite passes:\n\n- calc\n- duration\n- intervals\n- lru\n- semver\n- wrap\n\nDONE",
+      "stderr_tail": "",
+      "verified_per_min": 12.587,
+      "verified_per_100k_tokens": 26.64,
+      "tasks": 6,
+      "player": "codex",
+      "cli_model": "gpt-5.6-luna",
+      "effort": [
+       "low"
+      ],
+      "date": "2026-10-19",
+      "endpoint_at_start": {}
+     },
+     "B": {
+      "arm": "B UnumPingPong tables",
+      "points": 6,
+      "per_task": {
+       "calc": true,
+       "duration": true,
+       "intervals": true,
+       "lru": true,
+       "semver": true,
+       "wrap": true
+      },
+      "rallies": 7,
+      "faults": 0,
+      "wall_s": 20.6,
+      "effort": [
+       "low",
+       "medium",
+       "high"
+      ],
+      "parallel": "3",
+      "parallel_used": "3",
+      "fresh_input_tokens": 20186,
+      "cached_input_tokens": 2048,
+      "completion_tokens": 4213,
+      "prompt_tokens": 22234,
+      "tokens_total": 26447,
+      "billable_tokens": 24604,
+      "tokens": 24604,
+      "cost_usd": null,
+      "player_tokens": 24604,
+      "orchestrator_tokens": 0,
+      "player_mode": [
+       "persistent (codex app-server)"
+      ],
+      "cards_from_block": 7,
+      "rally_cards": 7,
+      "block_cards_claiming_done": 7,
+      "player_claimed_done_referee_failed": 1,
+      "rallies_at_max_tokens": 0,
+      "per_table": {
+       "intervals": {
+        "rallies": 1,
+        "completion_tokens": [
+         200
+        ]
+       },
+       "duration": {
+        "rallies": 1,
+        "completion_tokens": [
+         339
+        ]
+       },
+       "calc": {
+        "rallies": 1,
+        "completion_tokens": [
+         861
+        ]
+       },
+       "lru": {
+        "rallies": 1,
+        "completion_tokens": [
+         318
+        ]
+       },
+       "semver": {
+        "rallies": 2,
+        "completion_tokens": [
+         783,
+         1173
+        ]
+       },
+       "wrap": {
+        "rallies": 1,
+        "completion_tokens": [
+         539
+        ]
+       }
+      },
+      "upp_stderr_tail": "",
+      "verified_per_min": 17.476,
+      "verified_per_100k_tokens": 24.39,
+      "tasks": 6,
+      "player": "codex",
+      "cli_model": "gpt-5.6-luna",
+      "config": {
+       "persistent": true,
+       "lean": true,
+       "tools": "none",
+       "system_prompt": true
+      },
       "date": "2026-10-19",
       "endpoint_at_start": {}
      }
@@ -585,7 +874,7 @@
     "rallies_at_max_tokens": 4,
     "note": "Capped: the remaining tables were stopped at 25 min (model-time budget on a shared endpoint); 3 faults are those cancelled calls; 4 tables never started."
    },
-   "cloud": {
+   "cloud_v020": {
     "haiku": {
      "A": {
       "arm": "A one agent session",
@@ -623,7 +912,12 @@
       "cli_model": "haiku",
       "effort": [],
       "date": "2026-10-19",
-      "endpoint_at_start": {}
+      "endpoint_at_start": {},
+      "tokens_total": 254792,
+      "fresh_input_tokens": 39068,
+      "cached_input_tokens": 197423,
+      "billable_tokens": 77111,
+      "version": "v0.2.0"
      },
      "B": {
       "arm": "B UnumPingPong tables",
@@ -718,7 +1012,10 @@
       "player": "claude",
       "cli_model": "haiku",
       "date": "2026-10-19",
-      "endpoint_at_start": {}
+      "endpoint_at_start": {},
+      "tokens_total": 407193,
+      "billable_tokens": null,
+      "version": "v0.2.0"
      }
     },
     "luna-low": {
@@ -760,7 +1057,12 @@
        "low"
       ],
       "date": "2026-10-19",
-      "endpoint_at_start": {}
+      "endpoint_at_start": {},
+      "tokens_total": 325038,
+      "fresh_input_tokens": 21402,
+      "cached_input_tokens": 296960,
+      "billable_tokens": 57774,
+      "version": "v0.2.0"
      },
      "B": {
       "arm": "B UnumPingPong tables",
@@ -854,11 +1156,1079 @@
       "player": "codex",
       "cli_model": "gpt-5.6-luna",
       "date": "2026-10-19",
+      "endpoint_at_start": {},
+      "tokens_total": 436010,
+      "billable_tokens": null,
+      "version": "v0.2.0"
+     }
+    }
+   },
+   "cloud": {
+    "haiku": {
+     "A": {
+      "arm": "A one agent session",
+      "points": 8,
+      "per_task": {
+       "bankround": true,
+       "csvline": true,
+       "glob": true,
+       "isoweek": true,
+       "jsonptr": true,
+       "moneysplit": true,
+       "roman": true,
+       "topo": true
+      },
+      "turns": 29,
+      "max_turns": null,
+      "shell_runs": null,
+      "wall_s": 92.9,
+      "fresh_input_tokens": 39227,
+      "cached_input_tokens": 273553,
+      "completion_tokens": 19467,
+      "prompt_tokens": 312780,
+      "tokens_total": 332247,
+      "billable_tokens": 86049,
+      "tokens": 86049,
+      "cost_usd": 0.0203,
+      "lean": true,
+      "declared_done": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "claimed_done_but_failed": false,
+      "failed_when_claimed_done": 0,
+      "final_message_tail": "ot use fnmatch, glob or re\" became \"Do not use the standard pattern-matching helpers\".\n\nRunning the tests also left `__pycache__` directories in each folder. I did not remove them.\n\nI also briefly created a stray `bankround/solution.py.unused` placeholder by mistake and deleted it right after.\n\nDONE",
+      "stderr_tail": "",
+      "verified_per_min": 5.167,
+      "verified_per_100k_tokens": 9.3,
+      "tasks": 8,
+      "player": "claude",
+      "cli_model": "haiku",
+      "effort": [],
+      "date": "2026-10-19",
+      "endpoint_at_start": {}
+     },
+     "B0": {
+      "arm": "B UnumPingPong tables",
+      "points": 8,
+      "per_task": {
+       "bankround": true,
+       "csvline": true,
+       "glob": true,
+       "isoweek": true,
+       "jsonptr": true,
+       "moneysplit": true,
+       "roman": true,
+       "topo": true
+      },
+      "rallies": 8,
+      "faults": 0,
+      "wall_s": 48.4,
+      "effort": [
+       "low",
+       "medium",
+       "high"
+      ],
+      "parallel": "3",
+      "parallel_used": "3",
+      "fresh_input_tokens": 73694,
+      "cached_input_tokens": 183116,
+      "completion_tokens": 28990,
+      "prompt_tokens": 256810,
+      "tokens_total": 285800,
+      "billable_tokens": 120996,
+      "tokens": 120996,
+      "cost_usd": 0.031062,
+      "player_tokens": 120997,
+      "orchestrator_tokens": 0,
+      "player_mode": [
+       "per-rally"
+      ],
+      "cards_from_block": 8,
+      "rally_cards": 8,
+      "block_cards_claiming_done": 8,
+      "player_claimed_done_referee_failed": 0,
+      "rallies_at_max_tokens": 1,
+      "per_table": {
+       "csvline": {
+        "rallies": 1,
+        "completion_tokens": [
+         3193
+        ]
+       },
+       "bankround": {
+        "rallies": 1,
+        "completion_tokens": [
+         3830
+        ]
+       },
+       "glob": {
+        "rallies": 1,
+        "completion_tokens": [
+         7580
+        ]
+       },
+       "isoweek": {
+        "rallies": 1,
+        "completion_tokens": [
+         3677
+        ]
+       },
+       "jsonptr": {
+        "rallies": 1,
+        "completion_tokens": [
+         3711
+        ]
+       },
+       "roman": {
+        "rallies": 1,
+        "completion_tokens": [
+         2000
+        ]
+       },
+       "topo": {
+        "rallies": 1,
+        "completion_tokens": [
+         2148
+        ]
+       },
+       "moneysplit": {
+        "rallies": 1,
+        "completion_tokens": [
+         2851
+        ]
+       }
+      },
+      "upp_stderr_tail": "",
+      "verified_per_min": 9.917,
+      "verified_per_100k_tokens": 6.61,
+      "tasks": 8,
+      "player": "claude",
+      "cli_model": "haiku",
+      "config": {
+       "persistent": false,
+       "lean": false,
+       "tools": "default",
+       "system_prompt": false
+      },
+      "date": "2026-10-19",
+      "endpoint_at_start": {}
+     },
+     "B1": {
+      "arm": "B UnumPingPong tables",
+      "points": 8,
+      "per_task": {
+       "bankround": true,
+       "csvline": true,
+       "glob": true,
+       "isoweek": true,
+       "jsonptr": true,
+       "moneysplit": true,
+       "roman": true,
+       "topo": true
+      },
+      "rallies": 12,
+      "faults": 0,
+      "wall_s": 59.0,
+      "effort": [
+       "low",
+       "medium",
+       "high"
+      ],
+      "parallel": "3",
+      "parallel_used": "3",
+      "fresh_input_tokens": 79480,
+      "cached_input_tokens": 177846,
+      "completion_tokens": 32393,
+      "prompt_tokens": 257326,
+      "tokens_total": 289719,
+      "billable_tokens": 129658,
+      "tokens": 129658,
+      "cost_usd": 0.033868,
+      "player_tokens": 129659,
+      "orchestrator_tokens": 0,
+      "player_mode": [
+       "persistent (claude stream-json)"
+      ],
+      "cards_from_block": 12,
+      "rally_cards": 12,
+      "block_cards_claiming_done": 10,
+      "player_claimed_done_referee_failed": 3,
+      "rallies_at_max_tokens": 0,
+      "per_table": {
+       "bankround": {
+        "rallies": 2,
+        "completion_tokens": [
+         2980,
+         1072
+        ]
+       },
+       "csvline": {
+        "rallies": 1,
+        "completion_tokens": [
+         4038
+        ]
+       },
+       "glob": {
+        "rallies": 3,
+        "completion_tokens": [
+         4810,
+         1943,
+         2141
+        ]
+       },
+       "jsonptr": {
+        "rallies": 1,
+        "completion_tokens": [
+         3131
+        ]
+       },
+       "isoweek": {
+        "rallies": 2,
+        "completion_tokens": [
+         2917,
+         1586
+        ]
+       },
+       "moneysplit": {
+        "rallies": 1,
+        "completion_tokens": [
+         1911
+        ]
+       },
+       "topo": {
+        "rallies": 1,
+        "completion_tokens": [
+         1972
+        ]
+       },
+       "roman": {
+        "rallies": 1,
+        "completion_tokens": [
+         3892
+        ]
+       }
+      },
+      "upp_stderr_tail": "",
+      "verified_per_min": 8.136,
+      "verified_per_100k_tokens": 6.17,
+      "tasks": 8,
+      "player": "claude",
+      "cli_model": "haiku",
+      "config": {
+       "persistent": true,
+       "lean": false,
+       "tools": "default",
+       "system_prompt": false
+      },
+      "date": "2026-10-19",
+      "endpoint_at_start": {}
+     },
+     "B2": {
+      "arm": "B UnumPingPong tables",
+      "points": 8,
+      "per_task": {
+       "bankround": true,
+       "csvline": true,
+       "glob": true,
+       "isoweek": true,
+       "jsonptr": true,
+       "moneysplit": true,
+       "roman": true,
+       "topo": true
+      },
+      "rallies": 9,
+      "faults": 0,
+      "wall_s": 43.1,
+      "effort": [
+       "low",
+       "medium",
+       "high"
+      ],
+      "parallel": "3",
+      "parallel_used": "3",
+      "fresh_input_tokens": 60983,
+      "cached_input_tokens": 62459,
+      "completion_tokens": 24980,
+      "prompt_tokens": 123442,
+      "tokens_total": 148422,
+      "billable_tokens": 92209,
+      "tokens": 92209,
+      "cost_usd": 0.025309,
+      "player_tokens": 92207,
+      "orchestrator_tokens": 0,
+      "player_mode": [
+       "persistent (claude stream-json)"
+      ],
+      "cards_from_block": 9,
+      "rally_cards": 9,
+      "block_cards_claiming_done": 9,
+      "player_claimed_done_referee_failed": 1,
+      "rallies_at_max_tokens": 0,
+      "per_table": {
+       "csvline": {
+        "rallies": 1,
+        "completion_tokens": [
+         3537
+        ]
+       },
+       "bankround": {
+        "rallies": 2,
+        "completion_tokens": [
+         3656,
+         1146
+        ]
+       },
+       "glob": {
+        "rallies": 1,
+        "completion_tokens": [
+         4821
+        ]
+       },
+       "isoweek": {
+        "rallies": 1,
+        "completion_tokens": [
+         2846
+        ]
+       },
+       "jsonptr": {
+        "rallies": 1,
+        "completion_tokens": [
+         2414
+        ]
+       },
+       "moneysplit": {
+        "rallies": 1,
+        "completion_tokens": [
+         2301
+        ]
+       },
+       "roman": {
+        "rallies": 1,
+        "completion_tokens": [
+         2353
+        ]
+       },
+       "topo": {
+        "rallies": 1,
+        "completion_tokens": [
+         1906
+        ]
+       }
+      },
+      "upp_stderr_tail": "",
+      "verified_per_min": 11.137,
+      "verified_per_100k_tokens": 8.68,
+      "tasks": 8,
+      "player": "claude",
+      "cli_model": "haiku",
+      "config": {
+       "persistent": true,
+       "lean": true,
+       "tools": "default",
+       "system_prompt": false
+      },
+      "date": "2026-10-19",
+      "endpoint_at_start": {}
+     },
+     "B3": {
+      "arm": "B UnumPingPong tables",
+      "points": 8,
+      "per_task": {
+       "bankround": true,
+       "csvline": true,
+       "glob": true,
+       "isoweek": true,
+       "jsonptr": true,
+       "moneysplit": true,
+       "roman": true,
+       "topo": true
+      },
+      "rallies": 10,
+      "faults": 0,
+      "wall_s": 47.0,
+      "effort": [
+       "low",
+       "medium",
+       "high"
+      ],
+      "parallel": "3",
+      "parallel_used": "3",
+      "fresh_input_tokens": 29983,
+      "cached_input_tokens": 26005,
+      "completion_tokens": 29534,
+      "prompt_tokens": 55988,
+      "tokens_total": 85522,
+      "billable_tokens": 62118,
+      "tokens": 62118,
+      "cost_usd": 0.021022,
+      "player_tokens": 62117,
+      "orchestrator_tokens": 0,
+      "player_mode": [
+       "persistent (claude stream-json)"
+      ],
+      "cards_from_block": 10,
+      "rally_cards": 10,
+      "block_cards_claiming_done": 10,
+      "player_claimed_done_referee_failed": 2,
+      "rallies_at_max_tokens": 0,
+      "per_table": {
+       "bankround": {
+        "rallies": 1,
+        "completion_tokens": [
+         3037
+        ]
+       },
+       "csvline": {
+        "rallies": 1,
+        "completion_tokens": [
+         4425
+        ]
+       },
+       "glob": {
+        "rallies": 2,
+        "completion_tokens": [
+         5298,
+         1758
+        ]
+       },
+       "isoweek": {
+        "rallies": 2,
+        "completion_tokens": [
+         3182,
+         1683
+        ]
+       },
+       "jsonptr": {
+        "rallies": 1,
+        "completion_tokens": [
+         2782
+        ]
+       },
+       "moneysplit": {
+        "rallies": 1,
+        "completion_tokens": [
+         2566
+        ]
+       },
+       "roman": {
+        "rallies": 1,
+        "completion_tokens": [
+         2866
+        ]
+       },
+       "topo": {
+        "rallies": 1,
+        "completion_tokens": [
+         1937
+        ]
+       }
+      },
+      "upp_stderr_tail": "",
+      "verified_per_min": 10.213,
+      "verified_per_100k_tokens": 12.88,
+      "tasks": 8,
+      "player": "claude",
+      "cli_model": "haiku",
+      "config": {
+       "persistent": true,
+       "lean": true,
+       "tools": "none",
+       "system_prompt": false
+      },
+      "date": "2026-10-19",
+      "endpoint_at_start": {}
+     },
+     "B4": {
+      "arm": "B UnumPingPong tables",
+      "points": 8,
+      "per_task": {
+       "bankround": true,
+       "csvline": true,
+       "glob": true,
+       "isoweek": true,
+       "jsonptr": true,
+       "moneysplit": true,
+       "roman": true,
+       "topo": true
+      },
+      "rallies": 9,
+      "faults": 0,
+      "wall_s": 34.5,
+      "effort": [
+       "low",
+       "medium",
+       "high"
+      ],
+      "parallel": "3",
+      "parallel_used": "3",
+      "fresh_input_tokens": 19699,
+      "cached_input_tokens": 1914,
+      "completion_tokens": 21216,
+      "prompt_tokens": 21613,
+      "tokens_total": 42829,
+      "billable_tokens": 41106,
+      "tokens": 41106,
+      "cost_usd": 0.014565,
+      "player_tokens": 41106,
+      "orchestrator_tokens": 0,
+      "player_mode": [
+       "persistent (claude stream-json)"
+      ],
+      "cards_from_block": 9,
+      "rally_cards": 9,
+      "block_cards_claiming_done": 7,
+      "player_claimed_done_referee_failed": 1,
+      "rallies_at_max_tokens": 0,
+      "per_table": {
+       "bankround": {
+        "rallies": 1,
+        "completion_tokens": [
+         2466
+        ]
+       },
+       "csvline": {
+        "rallies": 1,
+        "completion_tokens": [
+         2569
+        ]
+       },
+       "glob": {
+        "rallies": 2,
+        "completion_tokens": [
+         4570,
+         1673
+        ]
+       },
+       "isoweek": {
+        "rallies": 1,
+        "completion_tokens": [
+         1927
+        ]
+       },
+       "jsonptr": {
+        "rallies": 1,
+        "completion_tokens": [
+         2441
+        ]
+       },
+       "roman": {
+        "rallies": 1,
+        "completion_tokens": [
+         1376
+        ]
+       },
+       "moneysplit": {
+        "rallies": 1,
+        "completion_tokens": [
+         2472
+        ]
+       },
+       "topo": {
+        "rallies": 1,
+        "completion_tokens": [
+         1722
+        ]
+       }
+      },
+      "upp_stderr_tail": "",
+      "verified_per_min": 13.913,
+      "verified_per_100k_tokens": 19.46,
+      "tasks": 8,
+      "player": "claude",
+      "cli_model": "haiku",
+      "config": {
+       "persistent": true,
+       "lean": true,
+       "tools": "none",
+       "system_prompt": true
+      },
+      "date": "2026-10-19",
+      "endpoint_at_start": {}
+     },
+     "B": {
+      "arm": "B UnumPingPong tables",
+      "points": 8,
+      "per_task": {
+       "bankround": true,
+       "csvline": true,
+       "glob": true,
+       "isoweek": true,
+       "jsonptr": true,
+       "moneysplit": true,
+       "roman": true,
+       "topo": true
+      },
+      "rallies": 9,
+      "faults": 0,
+      "wall_s": 34.5,
+      "effort": [
+       "low",
+       "medium",
+       "high"
+      ],
+      "parallel": "3",
+      "parallel_used": "3",
+      "fresh_input_tokens": 19699,
+      "cached_input_tokens": 1914,
+      "completion_tokens": 21216,
+      "prompt_tokens": 21613,
+      "tokens_total": 42829,
+      "billable_tokens": 41106,
+      "tokens": 41106,
+      "cost_usd": 0.014565,
+      "player_tokens": 41106,
+      "orchestrator_tokens": 0,
+      "player_mode": [
+       "persistent (claude stream-json)"
+      ],
+      "cards_from_block": 9,
+      "rally_cards": 9,
+      "block_cards_claiming_done": 7,
+      "player_claimed_done_referee_failed": 1,
+      "rallies_at_max_tokens": 0,
+      "per_table": {
+       "bankround": {
+        "rallies": 1,
+        "completion_tokens": [
+         2466
+        ]
+       },
+       "csvline": {
+        "rallies": 1,
+        "completion_tokens": [
+         2569
+        ]
+       },
+       "glob": {
+        "rallies": 2,
+        "completion_tokens": [
+         4570,
+         1673
+        ]
+       },
+       "isoweek": {
+        "rallies": 1,
+        "completion_tokens": [
+         1927
+        ]
+       },
+       "jsonptr": {
+        "rallies": 1,
+        "completion_tokens": [
+         2441
+        ]
+       },
+       "roman": {
+        "rallies": 1,
+        "completion_tokens": [
+         1376
+        ]
+       },
+       "moneysplit": {
+        "rallies": 1,
+        "completion_tokens": [
+         2472
+        ]
+       },
+       "topo": {
+        "rallies": 1,
+        "completion_tokens": [
+         1722
+        ]
+       }
+      },
+      "upp_stderr_tail": "",
+      "verified_per_min": 13.913,
+      "verified_per_100k_tokens": 19.46,
+      "tasks": 8,
+      "player": "claude",
+      "cli_model": "haiku",
+      "config": {
+       "persistent": true,
+       "lean": true,
+       "tools": "none",
+       "system_prompt": true
+      },
+      "date": "2026-10-19",
+      "endpoint_at_start": {},
+      "note": "same run as ablation B4"
+     },
+     "B5": {
+      "arm": "B UnumPingPong tables",
+      "points": 8,
+      "per_task": {
+       "bankround": true,
+       "csvline": true,
+       "glob": true,
+       "isoweek": true,
+       "jsonptr": true,
+       "moneysplit": true,
+       "roman": true,
+       "topo": true
+      },
+      "rallies": 9,
+      "faults": 0,
+      "wall_s": 39.7,
+      "effort": [
+       "low",
+       "medium",
+       "high"
+      ],
+      "parallel": "3",
+      "parallel_used": "3",
+      "fresh_input_tokens": 19369,
+      "cached_input_tokens": 8701,
+      "completion_tokens": 21086,
+      "prompt_tokens": 28070,
+      "tokens_total": 49156,
+      "billable_tokens": 41325,
+      "tokens": 41325,
+      "cost_usd": 0.014502,
+      "player_tokens": 41327,
+      "orchestrator_tokens": 0,
+      "player_mode": [
+       "persistent (claude stream-json)"
+      ],
+      "cards_from_block": 9,
+      "rally_cards": 9,
+      "block_cards_claiming_done": 7,
+      "player_claimed_done_referee_failed": 1,
+      "rallies_at_max_tokens": 0,
+      "per_table": {
+       "csvline": {
+        "rallies": 1,
+        "completion_tokens": [
+         3178
+        ]
+       },
+       "glob": {
+        "rallies": 1,
+        "completion_tokens": [
+         4505
+        ]
+       },
+       "bankround": {
+        "rallies": 1,
+        "completion_tokens": [
+         2690
+        ]
+       },
+       "isoweek": {
+        "rallies": 1,
+        "completion_tokens": [
+         2508
+        ]
+       },
+       "jsonptr": {
+        "rallies": 2,
+        "completion_tokens": [
+         1813,
+         1234
+        ]
+       },
+       "moneysplit": {
+        "rallies": 1,
+        "completion_tokens": [
+         1559
+        ]
+       },
+       "topo": {
+        "rallies": 1,
+        "completion_tokens": [
+         1151
+        ]
+       },
+       "roman": {
+        "rallies": 1,
+        "completion_tokens": [
+         2448
+        ]
+       }
+      },
+      "upp_stderr_tail": "",
+      "verified_per_min": 12.091,
+      "verified_per_100k_tokens": 19.36,
+      "tasks": 8,
+      "player": "claude",
+      "cli_model": "haiku",
+      "config": {
+       "persistent": true,
+       "lean": true,
+       "tools": "none",
+       "system_prompt": true,
+       "search": true
+      },
+      "date": "2026-10-19",
+      "endpoint_at_start": {}
+     }
+    },
+    "luna-low": {
+     "A": {
+      "arm": "A one agent session",
+      "points": 7,
+      "per_task": {
+       "bankround": true,
+       "csvline": true,
+       "glob": true,
+       "isoweek": false,
+       "jsonptr": true,
+       "moneysplit": true,
+       "roman": true,
+       "topo": true
+      },
+      "turns": null,
+      "max_turns": null,
+      "shell_runs": null,
+      "wall_s": 87.7,
+      "fresh_input_tokens": 31262,
+      "cached_input_tokens": 355584,
+      "completion_tokens": 9806,
+      "prompt_tokens": 386846,
+      "tokens_total": 396652,
+      "billable_tokens": 76626,
+      "tokens": 76626,
+      "cost_usd": null,
+      "lean": true,
+      "declared_done": false,
+      "exit_code": 0,
+      "timed_out": false,
+      "claimed_done_but_failed": false,
+      "failed_when_claimed_done": null,
+      "final_message_tail": "Implemented all eight task solutions. Most tests pass, but `isoweek` still has a boundary-case failure for dates in ISO week 53.\n\nNOT DONE: `isoweek` tests are still failing.",
+      "stderr_tail": "19T16:23:28.368835Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /tmp/claude-1000/-home-corpunum/c5420f20-e165-49ca-a922-eef7e915ee1b/scratchpad/upp-bench/luna-low/hard/a/glob/solution.py:\n        if j<len(p) and p[j]=='!' : neg=True; j+=1\n",
+      "verified_per_min": 4.789,
+      "verified_per_100k_tokens": 9.14,
+      "tasks": 8,
+      "player": "codex",
+      "cli_model": "gpt-5.6-luna",
+      "effort": [
+       "low"
+      ],
+      "date": "2026-10-19",
+      "endpoint_at_start": {}
+     },
+     "B": {
+      "arm": "B UnumPingPong tables",
+      "points": 8,
+      "per_task": {
+       "bankround": true,
+       "csvline": true,
+       "glob": true,
+       "isoweek": true,
+       "jsonptr": true,
+       "moneysplit": true,
+       "roman": true,
+       "topo": true
+      },
+      "rallies": 9,
+      "faults": 0,
+      "wall_s": 22.6,
+      "effort": [
+       "low",
+       "medium",
+       "high"
+      ],
+      "parallel": "3",
+      "parallel_used": "3",
+      "fresh_input_tokens": 26807,
+      "cached_input_tokens": 2048,
+      "completion_tokens": 6172,
+      "prompt_tokens": 28855,
+      "tokens_total": 35027,
+      "billable_tokens": 33184,
+      "tokens": 33184,
+      "cost_usd": null,
+      "player_tokens": 33184,
+      "orchestrator_tokens": 0,
+      "player_mode": [
+       "persistent (codex app-server)"
+      ],
+      "cards_from_block": 9,
+      "rally_cards": 9,
+      "block_cards_claiming_done": 9,
+      "player_claimed_done_referee_failed": 1,
+      "rallies_at_max_tokens": 0,
+      "per_table": {
+       "csvline": {
+        "rallies": 2,
+        "completion_tokens": [
+         579,
+         683
+        ]
+       },
+       "bankround": {
+        "rallies": 1,
+        "completion_tokens": [
+         1019
+        ]
+       },
+       "glob": {
+        "rallies": 1,
+        "completion_tokens": [
+         1258
+        ]
+       },
+       "jsonptr": {
+        "rallies": 1,
+        "completion_tokens": [
+         433
+        ]
+       },
+       "moneysplit": {
+        "rallies": 1,
+        "completion_tokens": [
+         470
+        ]
+       },
+       "isoweek": {
+        "rallies": 1,
+        "completion_tokens": [
+         866
+        ]
+       },
+       "roman": {
+        "rallies": 1,
+        "completion_tokens": [
+         506
+        ]
+       },
+       "topo": {
+        "rallies": 1,
+        "completion_tokens": [
+         358
+        ]
+       }
+      },
+      "upp_stderr_tail": "",
+      "verified_per_min": 21.239,
+      "verified_per_100k_tokens": 24.11,
+      "tasks": 8,
+      "player": "codex",
+      "cli_model": "gpt-5.6-luna",
+      "config": {
+       "persistent": true,
+       "lean": true,
+       "tools": "none",
+       "system_prompt": true
+      },
+      "date": "2026-10-19",
+      "endpoint_at_start": {}
+     },
+     "B3": {
+      "arm": "B UnumPingPong tables",
+      "points": 8,
+      "per_task": {
+       "bankround": true,
+       "csvline": true,
+       "glob": true,
+       "isoweek": true,
+       "jsonptr": true,
+       "moneysplit": true,
+       "roman": true,
+       "topo": true
+      },
+      "rallies": 14,
+      "faults": 0,
+      "wall_s": 55.0,
+      "effort": [
+       "low",
+       "medium",
+       "high"
+      ],
+      "parallel": "3",
+      "parallel_used": "3",
+      "fresh_input_tokens": 108475,
+      "cached_input_tokens": 235392,
+      "completion_tokens": 18705,
+      "prompt_tokens": 343867,
+      "tokens_total": 362572,
+      "billable_tokens": 150719,
+      "tokens": 150719,
+      "cost_usd": null,
+      "player_tokens": 150719,
+      "orchestrator_tokens": 0,
+      "player_mode": [
+       "persistent (codex app-server)"
+      ],
+      "cards_from_block": 14,
+      "rally_cards": 14,
+      "block_cards_claiming_done": 14,
+      "player_claimed_done_referee_failed": 6,
+      "rallies_at_max_tokens": 0,
+      "per_table": {
+       "glob": {
+        "rallies": 2,
+        "completion_tokens": [
+         1096,
+         958
+        ]
+       },
+       "csvline": {
+        "rallies": 2,
+        "completion_tokens": [
+         1748,
+         2529
+        ]
+       },
+       "bankround": {
+        "rallies": 3,
+        "completion_tokens": [
+         2325,
+         1215,
+         1289
+        ]
+       },
+       "isoweek": {
+        "rallies": 3,
+        "completion_tokens": [
+         819,
+         1214,
+         1792
+        ]
+       },
+       "jsonptr": {
+        "rallies": 1,
+        "completion_tokens": [
+         1656
+        ]
+       },
+       "moneysplit": {
+        "rallies": 1,
+        "completion_tokens": [
+         1105
+        ]
+       },
+       "roman": {
+        "rallies": 1,
+        "completion_tokens": [
+         579
+        ]
+       },
+       "topo": {
+        "rallies": 1,
+        "completion_tokens": [
+         380
+        ]
+       }
+      },
+      "upp_stderr_tail": "",
+      "verified_per_min": 8.727,
+      "verified_per_100k_tokens": 5.31,
+      "tasks": 8,
+      "player": "codex",
+      "cli_model": "gpt-5.6-luna",
+      "config": {
+       "persistent": true,
+       "lean": true,
+       "tools": "none",
+       "system_prompt": false
+      },
+      "date": "2026-10-19",
       "endpoint_at_start": {}
      }
     }
    }
   }
  },
- "notes_md": "## Why B was slower in v0.1 (580 s vs 354 s), and what changed\n\nMeasured on the endpoint (one model, Halogen 0.17.5, 3 admission slots), 2026-10-19:\n\n| Probe | Result |\n| --- | --- |\n| 1 stream, `reasoning_effort = none`, 400-token list | 48.4 tok/s |\n| 3 concurrent streams, same request | 55.7 tok/s in total (18.6 each): **1.15x**, not 3x |\n| v0.1 B, completion tokens per ball (6 balls, server default effort `xhigh`) | 1.5k-5.8k; 4 of 6 balls ran to 5.3-5.8k of the 6k budget |\n| v0.1 A, completion tokens | 14.5k in total: one long think (5.6k) in turn 1 covered all six tasks |\n| Per-rally engine overhead (referee run, store writes, scheduling) | under 1 s per rally, against 100-500 s model calls |\n\nSo the gap was **not** the parallel cap and not per-rally overhead. The endpoint's three slots\nare admission, not throughput: three streams decode about as fast as one in total. Wall time is\ntherefore about *total completion tokens / the endpoint's aggregate decode rate*, and v0.1's\nfresh-context balls each did a long `xhigh` think (25.4k completion tokens against A's 14.5k).\n\nChanges in v0.2:\n\n- **Effort hints per rally** (`effort = [\"low\", \"medium\", \"high\"]`): a cheap first try, more\n  thinking only after the referee returned the ball. On the easy set this cut B's completion\n  tokens from 25.4k to 14.3k (-44%) at the same 6/6.\n- **`--parallel auto`** probes the slot count (3 here), and now also leaves the requests the\n  endpoint is already serving to that traffic (it did not in the run below: B took all 3 slots\n  while the owner's own traffic was running, which queued their requests).\n- No change can make three streams faster than the endpoint's aggregate decode rate; on this\n  endpoint parallel tables mainly help when players are slow tools (CLIs, tests), not decode.\n\n## Caveats (read before quoting numbers)\n\n- **Shared, loaded endpoint.** The v0.2 runs (easy B, hard B) ran while 2-3 other streams were\n  in flight on the same endpoint (`in_flight` 2-3, sometimes 3 queued), so their wall times are\n  much longer than the v0.1 runs (which had a quieter endpoint) and are **not comparable** to\n  them. Token counts and verified tasks per token are comparable; wall times only within a run.\n- **Model-time budget.** The whole v0.2 benchmark was capped at about 40 minutes of model time\n  on a shared endpoint. Easy A was not re-run (the v0.1 measurement is shown). Hard B was stopped\n  after 25 minutes with 1 of 8 verified (4 tables never started), and **hard A was not run**, so\n  there is no A vs B comparison on the hard set yet. Arm C (tables + a persistent orchestrator\n  on the same model) is implemented and tested with scripted players, but was not run live for\n  the same reason.\n- **What the hard set already shows.** The referee matters there: in the player's own result\n  cards it claimed `done: yes` 6 times and the referee rejected 5 of those (syntax errors from\n  answers cut off at the token budget, a carry bug in banker's rounding, glob set edge cases, an\n  ISO-week boundary). In 4 of 12 rallies the model used the entire 6,000-token budget, mostly on\n  reasoning, even at `low` effort on rally 1, so the code was truncated: this hard set needs a\n  larger `max_tokens` (or `effort = \"none\"` first) on this model.\n- One run per arm, temperature 0.2. Treat everything as indicative.\n- Reproduce: `cargo build --release`, then\n  `python3 bench/bench.py --base-url URL --model NAME --set easy|hard --arm a,b,c`\n  (results merge into bench/results.json), and `python3 bench/card.py` for the result card.\n\n## Cloud players (Claude Haiku, Luna low), 2026-10-19\n\nSame task sets, same unit-test referee, run through the real agent CLIs with no local endpoint:\nClaude Code 2.1.303 `--model haiku` (Haiku 5.5) and codex-cli 0.160.0 `-m gpt-5.6-luna\n-c model_reasoning_effort=\"low\"` (`gpt-5.6-luna` is what `~/.codex/config.toml` migrates\n`gpt-5.4-mini` to). Both ran with user settings, MCP servers and memory switched off, edits and\nshell allowed, in a scratch directory. One run per arm. Reproduce:\n\n    python3 bench/bench.py --player claude --label haiku --cli-model haiku --set easy|hard --arm a,b --parallel 3\n    python3 bench/bench.py --player codex --label luna-low --cli-model gpt-5.6-luna --cli-effort low \\\n        --effort low,medium,high --set easy|hard --arm a,b --parallel 3\n\n- **A** = one CLI session over all tasks: it edits files, runs the tests itself, and ends with DONE\n  or NOT DONE. **B** = one UnumPingPong table per task, parallel 3, per-rally effort ladder\n  low/medium/high (Luna via `-c model_reasoning_effort`, Haiku via `--effort`; the Claude\n  adapter did not forward effort before this change), session resumed on a returned ball.\n- **Tokens** are what each CLI reports, input including cache reads and cache writes (about 10-25k\n  tokens of system prompt and tools are re-sent on every call). Claude reports a dollar cost, Codex\n  reports none. The Qwen reference column counts only prompt and completion tokens of a bare chat\n  call, so token columns are comparable inside a player, not across providers.\n- **Both cloud players verified every task in both arms (6/6 and 8/8)**: these sets do not separate\n  the arms on correctness for them. Neither A run claimed DONE falsely. In B the referee still\n  returned the ball once for Luna on easy (`calc`), once for Luna on hard (`bankround`) and twice\n  for Haiku on hard (`isoweek`, `jsonptr`); Haiku easy had none. Each returned ball was fixed on\n  rally 2 in the same resumed session (session id identical across rallies,\n  checked in the store).\n- **Where tables lose here:** tokens and cost. Every rally is a fresh agent invocation that\n  re-sends the system prompt and re-reads the stubs: B used 1.3x (Luna hard) to 2.8x (Luna easy)\n  the tokens of A, so verified per 100k tokens is lower for B for both cloud players, and Haiku's\n  hard-set cost was $0.046 for B against $0.019 for A. With a strong agent that fixes tasks in one\n  pass and tests itself, the single session is the cheaper arm. **Where tables win:** wall time\n  (Haiku 63 s vs 79 s hard, 30 s vs 36 s easy; Luna 47 s vs 53 s hard; a tie on easy at about\n  33 s), plus a deterministic referee instead of the agent's own word.\n- A is not comparable to local Qwen's A: Haiku/Luna are full agents with their own tool loops and\n  run 10-20x faster than the local model, so wall columns reflect hardware and provider, not the\n  method. The Qwen reference column is unchanged.\n"
+ "notes_md": "## Why B was slower in v0.1 (580 s vs 354 s), and what changed\n\nMeasured on the endpoint (one model, Halogen 0.17.5, 3 admission slots), 2026-10-19:\n\n| Probe | Result |\n| --- | --- |\n| 1 stream, `reasoning_effort = none`, 400-token list | 48.4 tok/s |\n| 3 concurrent streams, same request | 55.7 tok/s in total (18.6 each): **1.15x**, not 3x |\n| v0.1 B, completion tokens per ball (6 balls, server default effort `xhigh`) | 1.5k-5.8k; 4 of 6 balls ran to 5.3-5.8k of the 6k budget |\n| v0.1 A, completion tokens | 14.5k in total: one long think (5.6k) in turn 1 covered all six tasks |\n| Per-rally engine overhead (referee run, store writes, scheduling) | under 1 s per rally, against 100-500 s model calls |\n\nSo the gap was **not** the parallel cap and not per-rally overhead. The endpoint's three slots\nare admission, not throughput: three streams decode about as fast as one in total. Wall time is\ntherefore about *total completion tokens / the endpoint's aggregate decode rate*, and v0.1's\nfresh-context balls each did a long `xhigh` think (25.4k completion tokens against A's 14.5k).\n\nChanges in v0.2:\n\n- **Effort hints per rally** (`effort = [\"low\", \"medium\", \"high\"]`): a cheap first try, more\n  thinking only after the referee returned the ball. On the easy set this cut B's completion\n  tokens from 25.4k to 14.3k (-44%) at the same 6/6.\n- **`--parallel auto`** probes the slot count (3 here), and now also leaves the requests the\n  endpoint is already serving to that traffic (it did not in the run below: B took all 3 slots\n  while the owner's own traffic was running, which queued their requests).\n- No change can make three streams faster than the endpoint's aggregate decode rate; on this\n  endpoint parallel tables mainly help when players are slow tools (CLIs, tests), not decode.\n\n## Caveats (read before quoting numbers)\n\n- **Shared, loaded endpoint.** The v0.2 runs (easy B, hard B) ran while 2-3 other streams were\n  in flight on the same endpoint (`in_flight` 2-3, sometimes 3 queued), so their wall times are\n  much longer than the v0.1 runs (which had a quieter endpoint) and are **not comparable** to\n  them. Token counts and verified tasks per token are comparable; wall times only within a run.\n- **Model-time budget.** The whole v0.2 benchmark was capped at about 40 minutes of model time\n  on a shared endpoint. Easy A was not re-run (the v0.1 measurement is shown). Hard B was stopped\n  after 25 minutes with 1 of 8 verified (4 tables never started), and **hard A was not run**, so\n  there is no A vs B comparison on the hard set yet. Arm C (tables + a persistent orchestrator\n  on the same model) is implemented and tested with scripted players, but was not run live for\n  the same reason.\n- **What the hard set already shows.** The referee matters there: in the player's own result\n  cards it claimed `done: yes` 6 times and the referee rejected 5 of those (syntax errors from\n  answers cut off at the token budget, a carry bug in banker's rounding, glob set edge cases, an\n  ISO-week boundary). In 4 of 12 rallies the model used the entire 6,000-token budget, mostly on\n  reasoning, even at `low` effort on rally 1, so the code was truncated: this hard set needs a\n  larger `max_tokens` (or `effort = \"none\"` first) on this model.\n- One run per arm, temperature 0.2. Treat everything as indicative.\n- Reproduce: `cargo build --release`, then\n  `python3 bench/bench.py --base-url URL --model NAME --set easy|hard --arm a,b,c`\n  (results merge into bench/results.json), and `python3 bench/card.py` for the result card.\n\n## Cloud players (Claude Haiku, Luna low): token carry fixed in v0.2.1, 2026-10-19\n\nSame task sets, same unit-test referee, real agent CLIs, no local endpoint: Claude Code 2.1.303\n`--model haiku` (Haiku 5.5) and codex-cli 0.160.0 `-m gpt-5.6-luna -c model_reasoning_effort=\"low\"`.\nOne run per arm. **A** = one CLI session over all tasks: it edits files, runs the tests itself and\nends with DONE or NOT DONE. **B** = one UnumPingPong table per task, parallel 3, effort ladder\nlow/medium/high, `apply = { write_file = \"solution.py\" }` (the player's code block is written for\nit and the referee runs the tests).\n\n**Token metric.** *Billable tokens* = fresh input (cache writes included) + output + cache reads\nx 0.1 (Anthropic and OpenAI bill cache reads at about a tenth). \"All tokens processed\" counts cache\nreads in full, which is what the v0.2.0 tables showed; v0.2.0's B runs did not record the cached\npart apart, so their billable count is n/a (their cost, for Haiku, is real). Claude reports cost,\nCodex does not.\n\n**v0.2.0 problem.** Every rally was a fresh CLI invocation: the CLI's system prompt and 10-25k\ntokens of tool/MCP schemas went out again on every call, the agent then used those tools inside\nthe rally (read the file it had just been sent, ran the tests the referee was about to run), and\nthe \"tokens\" column added cache reads to fresh input. B cost 1.3-2.8x A (Haiku hard $0.046 vs\n$0.019).\n\n**What changed for CLI players (v0.2.1)**\n\n- *Persistent process*: one `claude --input-format stream-json` process or one `codex app-server`\n  thread per table, each rally a new turn. Measured alone (Haiku hard, B0 -> B1) it saves no tokens:\n  the API is stateless, so a resumed session and a live one send the same conversation, and the\n  prompt cache was already warm. It saves process start-up time and keeps the session explicit.\n- *Delta-only returns*: a returned ball carries the failing checks with the head and tail of their\n  output (about 2 KB at most) and one line; never the brief again. Small here (few returns).\n- *Lean context*: no MCP servers, settings, skills, memory or extra feature tools (Claude 15.3k ->\n  3.6k tokens of context with `tools = []`; Codex 12.9k -> 6.5k). Note that v0.2.0's\n  `-c mcp_servers={}` did not actually turn Codex's MCP servers off. Haiku hard B1 -> B2: 130k -> 92k\n  billable.\n- *Tools only as needed*: a table that writes the answer itself needs no player tools\n  (`tools = []`): Haiku hard B2 -> B3: 92k -> 62k, and the agent stops re-running tests.\n- *Short system prompt* (`system_prompt`, a 3-sentence player prompt in place of the CLI's agent\n  prompt): Haiku hard B3 -> B4: 62k -> 41k. For Codex this is the decisive step: without it Luna\n  still acted as a full agent inside each rally (code-mode tools, apply_patch, self-tests), hard B3\n  = 151k billable, 2x its A; with it 33k.\n\n**Result (A and B both with the lean flags; B as in the last ablation row).**\n\n- Haiku: easy 18.4k vs 29.3k billable (0.63x), $0.0065 vs $0.0073; hard 41.1k vs 86.0k (0.48x),\n  **$0.0146 vs $0.0203 (0.72x)**. Cost falls less than tokens because output (the full file per\n  answer) dominates B's bill and is about the same as A's.\n- Luna low: hard 33.2k vs 76.6k (0.43x), and B verified 8/8 where A verified 7/8 (A said\n  NOT DONE honestly: `isoweek` week-53 boundary). **Easy: B used slightly more, 24.6k vs 22.5k\n  (1.09x)**: six small tasks, each table pays its own uncached first call (B fresh input 20.2k,\n  cached 2k), while A's one session re-reads a warm cache at a tenth of the price. On sets of\n  small tasks a single Codex session stays a bit cheaper; tables win once tasks need several\n  turns of context.\n- Wall time: B was faster in all four pairs (17 vs 33 s, 21 vs 29 s, 34 vs 93 s, 23 vs 88 s).\n- The referee still mattered: B's players claimed done in their cards and the referee returned\n  one ball each on Luna easy (`semver`), Haiku hard (`glob`) and Luna hard (`csvline`), each fixed\n  on the next rally in the same session.\n- *UnumSearch on* (Haiku hard B5 = B4 + `search = \"unumsearch\"`, the UnumSearch MCP server as the\n  player's only tool): 41.3k billable, $0.0145, 8/8, the same as B4 within noise. The tool\n  schemas add about 2k tokens of context, mostly read from cache; these tasks hand the player the\n  whole file, so there is nothing to search for. Search pays off where the brief does not carry\n  the code (a repository task); chat players without tools get it through `context_search` /\n  `{{search:...}}` instead.\n- One run per arm and model calls are not deterministic (B1 needed 12 rallies where B0 needed 8);\n  treat differences under ~15% as noise. The ablation ran on Haiku only (cheap); Codex has A, B and\n  B without the short prompt.\n- A is not comparable to local Qwen's A: Haiku/Luna are full agents with their own tool loops and\n  run 10-20x faster than the local model, so wall columns reflect hardware and provider.\n\nReproduce:\n\n    python3 bench/bench.py --player claude --label haiku --cli-model haiku --set easy|hard --arm a,b --parallel 3 --b-system-prompt 1\n    python3 bench/bench.py --player codex --label luna-low --cli-model gpt-5.6-luna --cli-effort low \\\n        --effort low,medium,high --set easy|hard --arm a,b --parallel 3 --b-system-prompt 1\n    # ablation: --arm b --arm-key B0 --b-persistent 0 --b-lean 0 --b-tools default   (B1..B4 likewise)\n"
 }

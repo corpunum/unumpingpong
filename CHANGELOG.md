@@ -1,9 +1,51 @@
 # Changelog
 
-## Unreleased
+## v0.2.1 (2026-10-19) - Token carry for agent CLI players
 
-- Claude Code player forwards the per-rally `effort` as `--effort` (it was ignored for Claude); tested with a fake CLI over two rallies (resume + effort).
-- Benchmark: `bench.py --player claude|codex` runs arm A (one CLI session) and arm B (tables) with Claude Haiku and Luna-low; results, card and README updated.
+With Claude Code and Codex as players, v0.2.0's tables used 1.3-2.8x more tokens than one
+agent session: every rally was a fresh CLI invocation that re-sent the CLI's system prompt and
+tool schemas, and the accounting mixed cache reads with fresh input.
+
+- **Persistent players.** `claude` and `codex` players keep one process per table (`persistent`,
+  default true) and send each rally as a new turn: Claude Code over
+  `--input-format stream-json --output-format stream-json`, Codex over `codex app-server`
+  (JSON-RPC: `thread/start`, then one `turn/start` per rally, effort per turn). Claude restarts
+  with `--resume` when the rally effort changes (`--effort` is per process). When the mode is not
+  available (the process cannot start or speak the protocol, or Codex `args` are exec-only) the
+  table falls back to the per-rally resume path; a `player_mode` event records which ran.
+- **Delta-only returns.** A returned ball to a player that keeps its session carries only the
+  failing checks with the head (700 B) and tail (1.3 KB) of their output, any server note, and
+  one line asking for the fix; the brief is never repeated (players without a session still get
+  it). Fault messages are trimmed the same way.
+- **Lean CLI context** (`lean`, default true for claude/codex). Claude: `--strict-mcp-config`,
+  `--setting-sources ""`, `--disable-slash-commands`, `--exclude-dynamic-system-prompt-sections`.
+  Codex: extra feature tools, memories, hooks and web search off, and every MCP server from the
+  user's codex config turned off by name (`-c mcp_servers={}`, used by the v0.2.0 benchmark, did
+  not turn them off). New per-player `tools` (Claude `--tools`; `[]` = none, e.g. when `apply`
+  writes the answer; Codex `[]` turns its shell tools off) and `system_prompt` (replaces the
+  CLI's own: Claude `--system-prompt`, Codex base instructions).
+- **Honest accounting.** Every rally records fresh input (`tokens_in`, cache writes included),
+  cache reads (`tokens_cached`, new column) and output (`tokens_out`) apart, plus the CLI's
+  reported cost (Claude's cumulative stream cost becomes a per-rally difference). Codex, Gemini
+  and OpenAI-compatible `input`/`prompt` counts include the cached part and are split. Table
+  `tokens`, cards and `max_tokens` leases count **billable tokens**: fresh input + output + cache
+  reads at 0.1. `upp export` / transcripts carry `tokens_cached` and `billable_tokens`.
+- **UnumSearch for players** (off by default). `search = "unumsearch"` on a `claude` or `codex`
+  player attaches only the UnumSearch MCP server (Claude: `--mcp-config` + `--strict-mcp-config`
+  + `--allowedTools` for its three read-only tools; Codex: `-c mcp_servers.unumsearch.*`, other
+  servers stay off). For chat players without tools: `{{search:query}}` in a ball and a table's
+  `context_search = [...]` run `unumsearch search` in the table's cwd before rally 1 and put the
+  top 8 hits (`path:line: text`, capped) into the brief. Tested with a fake `unumsearch`;
+  verified live with Haiku and Luna (both called the search tool and found the right line).
+- Claude Code player forwards the per-rally `effort` as `--effort` (it was ignored for Claude).
+- **Benchmark.** `bench.py --player claude|codex` (arm A one CLI session, arm B tables), now with
+  the same lean flags for both arms, billable tokens as the headline, `--b-persistent`,
+  `--b-lean`, `--b-tools`, `--b-system-prompt` and `--arm-key` for ablations. Re-run with Haiku
+  and Luna-low: tables now use 0.43-0.63x the billable tokens of one session (Haiku hard 41k vs
+  86k, $0.0146 vs $0.0203; Luna hard 33k vs 77k, 8/8 vs 7/8), except Luna on the easy set
+  (1.09x: six small tables each pay an uncached first call). The persistent process alone saves
+  no tokens (Haiku hard ablation: 121k -> 130k); lean context, no player tools and a short
+  system prompt do (-> 92k -> 62k -> 41k). Results, card and README updated.
 
 ## v0.2.0 (2026-10-19) - Cards and a persistent orchestrator
 

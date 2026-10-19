@@ -40,6 +40,13 @@ ap.add_argument("--label", help="column name for a CLI player in results.json, e
 ap.add_argument("--cli-model", help="model passed to the CLI (claude: haiku; codex: gpt-5.6-luna)")
 ap.add_argument("--cli-effort", default="", help="codex model_reasoning_effort for arm A (B uses --effort)")
 ap.add_argument("--cli-timeout", type=int, default=2400, help="arm A: wall limit of the one agent session, seconds")
+ap.add_argument("--b-persistent", type=int, default=1, help="CLI players, B: one long-lived process per table (1) or one call per rally (0)")
+ap.add_argument("--b-lean", type=int, default=1, help="CLI players, B: lean context (1) or the v0.2.0 bench isolation flags (0)")
+ap.add_argument("--b-tools", default="none", help="CLI players, B: 'none' (apply writes the file, the referee tests), 'default', or a comma list")
+ap.add_argument("--b-system-prompt", type=int, default=0, help="CLI players, B: replace the CLI's system prompt with a short player prompt")
+ap.add_argument("--a-lean", type=int, default=1, help="CLI players, A: the same lean flags as B, tools limited to Read/Edit/Write/Bash")
+ap.add_argument("--b-search", type=int, default=0, help="CLI players, B: attach the UnumSearch MCP server (search = \"unumsearch\")")
+ap.add_argument("--arm-key", help="store the result under this key instead of A/B (ablations)")
 ap.add_argument("--temperature", type=float, default=0.2)
 ap.add_argument("--a-max-turns", type=int, default=0, help="default: max(20, 3 x tasks)")
 ap.add_argument("--b-max-rallies", type=int, default=4)
@@ -90,6 +97,27 @@ def chat(messages):
         d = json.load(r)
     u = d.get("usage", {})
     return d["choices"][0]["message"].get("content") or "", u.get("prompt_tokens", 0), u.get("completion_tokens", 0)
+
+
+CACHED_WEIGHT = 0.1  # cache reads cost about a tenth of fresh input (Anthropic and OpenAI)
+
+
+def split(fresh, cached, out, extra=0):
+    """Token fields of an arm. `tokens` (the headline) is billable: fresh input + output + cache
+    reads at their discount; `tokens_total` is everything the model processed."""
+    billable = round(fresh + out + cached * CACHED_WEIGHT) + extra
+    return {"fresh_input_tokens": fresh, "cached_input_tokens": cached, "completion_tokens": out,
+            "prompt_tokens": fresh + cached, "tokens_total": fresh + cached + out + extra,
+            "billable_tokens": billable, "tokens": billable}
+
+
+def player_modes(db):
+    try:
+        import sqlite3
+        c = sqlite3.connect(db)
+        return sorted({json.loads(d)["mode"] for (d,) in c.execute("SELECT data_json FROM events WHERE kind='player_mode'")})
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def headline(r, n):
@@ -163,11 +191,72 @@ Work through ALL tasks: {tasks}.
 Finish your final message with a line that says exactly DONE if every task's tests pass, or NOT DONE: <why> otherwise."""
 
 
-def cli_isolation():
+# Codex features that add tools/context a coding player does not need; the same list as the
+# Rust adapter's lean mode (crates/upp-core/src/player/cli.rs).
+CODEX_LEAN_FEATURES = ["apps", "browser_use", "browser_use_external", "computer_use", "image_generation", "multi_agent",
+                       "goals", "plugins", "remote_plugin", "skill_search", "skill_mcp_dependency_install", "tool_suggest",
+                       "view_image", "sleep_tool", "realtime_conversation", "in_app_browser", "workspace_dependencies",
+                       "hooks", "memories"]
+B_SYSTEM_PROMPT = ("You are the player at an UnumPingPong table. Each message is a task or the referee's report on your "
+                   "last answer. Reply with the complete content of the requested file in one fenced code block (it is "
+                   "written to disk for you and the tests run after), then the <card> block when asked. Do not use tools.")
+
+
+def legacy_isolation():
+    """The v0.2.0 bench flags (user settings / MCP off), kept for the ablation."""
     if a.player == "claude":
-        # No user settings / MCP servers / CLAUDE.md memory: the player sees only the task.
         return ["--setting-sources", "", "--strict-mcp-config", "--dangerously-skip-permissions"]
     return ["--dangerously-bypass-approvals-and-sandbox", "-c", "features.memories=false", "-c", "mcp_servers={}"]
+
+
+def codex_lean():
+    import tomllib
+    out = []
+    for f in CODEX_LEAN_FEATURES:
+        out += ["-c", f"features.{f}=false"]
+    out += ["-c", 'web_search="disabled"']
+    try:
+        cfg = tomllib.load(open(os.path.join(os.environ.get("CODEX_HOME", os.path.expanduser("~/.codex")), "config.toml"), "rb"))
+    except Exception:  # noqa: BLE001
+        cfg = {}
+    for name in cfg.get("mcp_servers", {}):
+        out += ["-c", f"mcp_servers.{json.dumps(name) if not re.fullmatch(r'[A-Za-z0-9_-]+', name) else name}.enabled=false"]
+    return out
+
+
+def a_cli_args():
+    """Arm A: one agent session; it needs tools to edit files and run the tests."""
+    if not a.a_lean:
+        return legacy_isolation()
+    if a.player == "claude":
+        return ["--setting-sources", "", "--strict-mcp-config", "--disable-slash-commands",
+                "--exclude-dynamic-system-prompt-sections", "--dangerously-skip-permissions",
+                "--tools", "Read,Edit,Write,Bash"]
+    return ["--dangerously-bypass-approvals-and-sandbox", *codex_lean()]
+
+
+def b_player_toml():
+    fields = [f'kind = "{a.player}"', f"model = {json.dumps(a.cli_model)}", "timeout_secs = 900",
+              f"persistent = {'true' if a.b_persistent else 'false'}", f"lean = {'true' if a.b_lean else 'false'}"]
+    if a.b_tools == "none":
+        fields.append("tools = []")
+    elif a.b_tools != "default":
+        fields.append("tools = " + json.dumps(a.b_tools.split(",")))
+    if a.b_system_prompt:
+        fields.append(f"system_prompt = {json.dumps(B_SYSTEM_PROMPT)}")
+    if a.b_search:
+        fields.append('search = "unumsearch"')
+    if a.b_lean:
+        args = ["--dangerously-skip-permissions"] if a.player == "claude" else ["--dangerously-bypass-approvals-and-sandbox"]
+    else:
+        args = legacy_isolation()
+    fields.append(f"args = {json.dumps(args)}")
+    return "{ " + ", ".join(fields) + " }"
+
+
+def b_config():
+    return {"persistent": bool(a.b_persistent), "lean": bool(a.b_lean), "tools": a.b_tools,
+            "system_prompt": bool(a.b_system_prompt), "search": bool(a.b_search)}
 
 
 def arm_a_cli(root):
@@ -177,9 +266,9 @@ def arm_a_cli(root):
     if os.path.exists(last):
         os.remove(last)
     if a.player == "claude":
-        argv = ["claude", "-p", "--output-format", "json", "--model", a.cli_model, *cli_isolation()]
+        argv = ["claude", "-p", "--output-format", "json", "--model", a.cli_model, *a_cli_args()]
     else:
-        argv = ["codex", "exec", "--json", "--skip-git-repo-check", "-o", last, "-m", a.cli_model, *cli_isolation()]
+        argv = ["codex", "exec", "--json", "--skip-git-repo-check", "-o", last, "-m", a.cli_model, *a_cli_args()]
         if a.cli_effort:
             argv += ["-c", f'model_reasoning_effort="{a.cli_effort}"']
         argv.append("-")
@@ -192,12 +281,13 @@ def arm_a_cli(root):
         r = subprocess.CompletedProcess(argv, -9, out, "")
         timed_out = True
     wall = time.time() - t0
-    pin = pout = cached = 0; cost = 0.0; text = ""; turns = None
+    fin = pout = cached = 0; cost = 0.0; text = ""; turns = None
     if a.player == "claude":
         try:
             j = json.loads(r.stdout)
             u = j.get("usage", {})
-            pin = u.get("input_tokens", 0) + u.get("cache_creation_input_tokens", 0) + u.get("cache_read_input_tokens", 0)
+            # Fresh input = input + cache writes; cache reads apart (as the adapter counts them).
+            fin = u.get("input_tokens", 0) + u.get("cache_creation_input_tokens", 0)
             cached = u.get("cache_read_input_tokens", 0)
             pout = u.get("output_tokens", 0); cost = j.get("total_cost_usd", 0.0); text = j.get("result", ""); turns = j.get("num_turns")
         except Exception:  # noqa: BLE001
@@ -209,8 +299,10 @@ def arm_a_cli(root):
             except Exception:  # noqa: BLE001
                 continue
             if v.get("type") == "turn.completed":
-                pin += v["usage"].get("input_tokens", 0); pout += v["usage"].get("output_tokens", 0)
-                cached += v["usage"].get("cached_input_tokens", 0)
+                # input_tokens includes the cached part.
+                c = v["usage"].get("cached_input_tokens", 0)
+                fin += v["usage"].get("input_tokens", 0) - c; cached += c
+                pout += v["usage"].get("output_tokens", 0)
             if v.get("type") == "item.completed" and v["item"].get("type") == "agent_message":
                 text = v["item"].get("text", "")
         if os.path.exists(last):
@@ -219,8 +311,8 @@ def arm_a_cli(root):
     pts = sum(ok.values())
     declared = bool(re.search(r"^\s*DONE\s*$", text, re.M)) and "NOT DONE" not in text
     return headline({"arm": "A one agent session", "points": pts, "per_task": ok, "turns": turns, "max_turns": None,
-                     "shell_runs": None, "wall_s": round(wall, 1), "prompt_tokens": pin, "completion_tokens": pout,
-                     "cached_prompt_tokens": cached, "tokens": pin + pout, "cost_usd": round(cost, 4) if cost else None,
+                     "shell_runs": None, "wall_s": round(wall, 1), **split(fin, cached, pout),
+                     "cost_usd": round(cost, 4) if cost else None, "lean": bool(a.a_lean),
                      "declared_done": declared, "exit_code": r.returncode, "timed_out": timed_out,
                      "claimed_done_but_failed": declared and pts < len(TASKS),
                      "failed_when_claimed_done": (len(TASKS) - pts) if declared else None,
@@ -237,8 +329,7 @@ def arm_tables(root, with_orchestrator):
     fresh(root)
     effort = [e for e in a.effort.split(",") if e]
     if a.player != "openai":
-        player = (f'{{ kind = "{a.player}", model = {json.dumps(a.cli_model)}, timeout_secs = 900, '
-                  f'args = {json.dumps(cli_isolation())} }}')
+        player = b_player_toml()
     else:
         player = (f'{{ kind = "openai", base_url = "{a.base_url}", model = "{a.model}", '
                   f'temperature = {a.temperature}, max_tokens = {a.max_tokens} }}')
@@ -274,7 +365,7 @@ def arm_tables(root, with_orchestrator):
     for x in rows:
         p = per_table.setdefault(x["table"], {"rallies": 0, "completion_tokens": []})
         p["rallies"] += 1; p["completion_tokens"].append(x.get("tokens_out", 0))
-    player_tokens = sum(x.get("tokens_in", 0) + x.get("tokens_out", 0) for x in rows)
+    player_tokens = sum(x.get("billable_tokens", x.get("tokens_in", 0) + x.get("tokens_out", 0)) for x in rows)
     orch_tokens = sum(t.get("orchestrator_tokens", 0) for t in summary.get("tables", []))
     pts = sum(ok.values())
     return headline({
@@ -282,9 +373,11 @@ def arm_tables(root, with_orchestrator):
         "points": pts, "per_task": ok, "rallies": len(rows), "faults": sum(1 for x in rows if x["verdict"] == "fault"),
         "wall_s": round(wall, 1), "effort": effort, "parallel": a.parallel,
         "parallel_used": re.search(r"--parallel auto -> (\d+)", r.stderr).group(1) if "--parallel auto" in r.stderr else a.parallel,
-        "prompt_tokens": sum(x.get("tokens_in", 0) for x in rows), "completion_tokens": sum(x.get("tokens_out", 0) for x in rows),
-        "cost_usd": round(sum(x.get("cost_usd", 0) or 0 for x in rows), 4) or None,
-        "player_tokens": player_tokens, "orchestrator_tokens": orch_tokens, "tokens": player_tokens + orch_tokens,
+        **split(sum(x.get("tokens_in", 0) for x in rows), sum(x.get("tokens_cached", 0) for x in rows),
+                sum(x.get("tokens_out", 0) for x in rows), orch_tokens),
+        "cost_usd": round(sum(x.get("cost_usd", 0) or 0 for x in rows), 6) or None,
+        "player_tokens": player_tokens, "orchestrator_tokens": orch_tokens,
+        "player_mode": player_modes(db),
         "cards_from_block": sum(1 for c in rally_cards if c.get("source") == "block"),
         "rally_cards": len(rally_cards),
         # Claims the player wrote itself (its <card> block), not the extractor's guesses.
@@ -320,8 +413,8 @@ def fmt_arm(r, key):
 
 def render(res, out):
     L = ["# Benchmark: single agent loop vs UnumPingPong tables", "",
-         f"Model `{res['model']}` at a local OpenAI-compatible endpoint (Halogen, 3 slots), temperature "
-         f"{res['temperature']}, max_tokens {res.get('max_tokens', 6000)} per call. One run per arm. "
+         f"Model `{res.get('model', '?')}` at a local OpenAI-compatible endpoint (Halogen, 3 slots), temperature "
+         f"{res.get('temperature')}, max_tokens {res.get('max_tokens', 6000)} per call. One run per arm. "
          "Headline metric: **verified tasks per minute and per 100k tokens** (a task counts only when its unit "
          "tests pass afterwards, whatever the arm claimed).", ""]
     rows = [("Verified tasks (unit tests afterwards)", "points"), ("Verified tasks per minute", "vpm"),
@@ -351,23 +444,49 @@ def render(res, out):
         failed = {k: [t for t, v in r["per_task"].items() if not v] for k, r in arms}
         L.append("- Tasks not verified: " + "; ".join(f"{k}: {', '.join(v) or 'none'}" for k, v in failed.items()) + ".")
         L.append("")
-    CLOUD = {"haiku": "Claude Haiku (Claude Code CLI)", "luna-low": "Luna, low effort (Codex CLI)"}
-    crow = rows[:5] + [("Cost", "cost")] + rows[5:7]
+    CLOUD = {"haiku": "Haiku", "luna-low": "Luna low"}
+    k = lambda v: f"{v / 1000:.1f}k" if v is not None else "n/a"
+    crows = [("Verified tasks", lambda r: f"{r['points']}/{r['tasks']}"),
+             ("Wall time", lambda r: f"{r['wall_s']:.0f} s"),
+             ("**Billable tokens** (fresh in + out + 0.1 x cached)", lambda r: f"**{k(r.get('billable_tokens'))}**"),
+             ("Fresh input / cached input / output", lambda r: (f"{k(r['fresh_input_tokens'])} / {k(r['cached_input_tokens'])} / "
+                                                                f"{k(r['completion_tokens'])}") if "fresh_input_tokens" in r else "n/a"),
+             ("All tokens processed", lambda r: k(r.get("tokens_total", r.get("tokens")))),
+             ("Cost reported by the CLI", lambda r: f"${r['cost_usd']:.4f}" if r.get("cost_usd") else "none"),
+             ("Verified per 100k billable tokens", lambda r: f"{r['points'] / r['billable_tokens'] * 1e5:.1f}" if r.get("billable_tokens") else "n/a"),
+             ("Model calls", lambda r: (f"{r['turns']} turns" if r.get("turns") else "one session") if "turns" in r
+              else f"{r['rallies']} rallies" + (f" ({r['faults']} faults)" if r.get("faults") else ""))]
     for name, s in res.get("sets", {}).items():
-        cl = s.get("cloud")
-        if not cl:
+        cl, old = s.get("cloud", {}), s.get("cloud_v020", {})
+        if not (cl or old):
             continue
-        cols = [("Qwen A (local, reference)", s["A"]) for _ in [0] if "A" in s] + \
-               [("Qwen B v0.2 (local, reference)", s["B"]) for _ in [0] if "B" in s]
-        for lab, v in cl.items():
-            for arm in ("A", "B"):
-                if arm in v:
-                    cols.append((f"{CLOUD.get(lab, lab)}: " + ("A one session" if arm == "A" else "B tables"), v[arm]))
-        L += [f"## {name.capitalize()} set with cloud players", "",
+        cols = []
+        for lab in CLOUD:
+            for src, ver in ((old, "v0.2.0"), (cl, "v0.2.1")):
+                for arm in ("A", "B"):
+                    if arm in src.get(lab, {}):
+                        cols.append((f"{CLOUD[lab]} {arm} {ver}", src[lab][arm]))
+        L += [f"## {name.capitalize()} set with cloud players: v0.2.0 vs v0.2.1", "",
               "| Metric | " + " | ".join(c for c, _ in cols) + " |", "| --- |" + " --- |" * len(cols)]
-        for label, key in crow:
-            L.append(f"| {label} | " + " | ".join(fmt_arm(r, key) for _, r in cols) + " |")
+        for label, f in crows:
+            L.append(f"| {label} | " + " | ".join(f(r) for _, r in cols) + " |")
         L.append("")
+        abl = [(f"{CLOUD.get(lab, lab)} {kk}", v) for lab in CLOUD for kk, v in cl.get(lab, {}).items()
+               if kk.startswith("B") and kk != "B" and "config" in v]
+        abl += [(f"{CLOUD.get(lab, lab)} B", cl[lab]["B"]) for lab in CLOUD
+                if "B" in cl.get(lab, {}) and abl and not cl[lab]["B"].get("note")]
+        if abl:
+            L += [f"### {name.capitalize()} set: what each change does (B tables, one run each)", "",
+                  "| Run | persistent | lean | tools | system prompt | UnumSearch MCP | verified | billable | fresh / cached / out | cost | rallies |",
+                  "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+            for kk, v in abl:
+                c = v["config"]
+                L.append(f"| {kk} | {'yes' if c['persistent'] else 'no'} | {'yes' if c['lean'] else 'no (v0.2.0 flags)'} | "
+                         f"{c['tools']} | {'short' if c['system_prompt'] else 'CLI default'} | {'on' if c.get('search') else 'off'} | "
+                         f"{v['points']}/{v['tasks']} | "
+                         f"{k(v['billable_tokens'])} | {k(v['fresh_input_tokens'])} / {k(v['cached_input_tokens'])} / "
+                         f"{k(v['completion_tokens'])} | " + (f"${v['cost_usd']:.4f}" if v.get("cost_usd") else "none") + f" | {v['rallies']} |")
+            L.append("")
     L += res.get("notes_md", "").splitlines()
     open(os.path.join(out, "results.md"), "w").write("\n".join(L).rstrip() + "\n")
     print("\n".join(L))
@@ -391,15 +510,17 @@ s = res.setdefault("sets", {}).setdefault(a.set, {})
 s["tasks"] = TASKS
 for arm in [x.strip() for x in a.arm.split(",") if x.strip()]:
     st = {} if cli else endpoint_state()
-    work = os.path.join(a.work, a.label or "local", a.set, arm)
+    work = os.path.join(a.work, a.label or "local", a.set, a.arm_key or arm)
     if cli:
         r = arm_a_cli(work) if arm == "a" else arm_tables(work, False)
         r["player"] = a.player; r["cli_model"] = a.cli_model
         r["effort"] = r.get("effort") or ([a.cli_effort] if a.cli_effort else [])
+        if arm != "a":
+            r["config"] = b_config()
     else:
         r = arm_a(work) if arm == "a" else arm_tables(work, arm == "c")
     r["date"] = time.strftime("%Y-%m-%d"); r["endpoint_at_start"] = st
-    (s.setdefault("cloud", {}).setdefault(a.label, {}) if cli else s)[arm.upper()] = r
+    (s.setdefault("cloud", {}).setdefault(a.label, {}) if cli else s)[a.arm_key or arm.upper()] = r
     print(a.label or "local", arm.upper(), json.dumps({k: v for k, v in r.items() if k not in ("log", "per_table", "upp_stderr_tail")}), flush=True)
     json.dump(res, open(path, "w"), indent=1)
 render(res, a.out)
