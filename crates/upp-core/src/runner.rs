@@ -20,7 +20,12 @@ enum Decision {
     Return(String),
     Stop,
     Expire(String),
+    /// Fail closed: the table ends as `error` (e.g. the reviewer stayed unavailable).
+    Fail(String),
 }
+
+/// Attempts at a model server's review of a ball the referee passed, before failing closed.
+pub const REVIEW_ATTEMPTS: u32 = 3;
 
 /// Replace `{{key}}` placeholders.
 pub fn render(template: &str, vars: &[(&str, &str)]) -> String {
@@ -358,18 +363,23 @@ fn run_inner(store: &Store, id: &str) -> Result<String, String> {
 
         store.set_phase(id, "referee", None)?;
         let applied = spec.apply.as_ref().map(|a| apply(a, &reply.text, &cwd));
-        let mut verdict = referee::referee(
-            &spec.referee,
-            &RefCtx {
-                table_id: id,
-                rally: n,
-                cwd: &cwd,
-                goal: &goal,
-                ball: &brief,
-                answer: &reply.text,
-                deadline,
-            },
-        );
+        let unverified = spec.referee.is_empty() && spec.unverified;
+        let mut verdict = if unverified {
+            referee::unverified()
+        } else {
+            referee::referee(
+                &spec.referee,
+                &RefCtx {
+                    table_id: id,
+                    rally: n,
+                    cwd: &cwd,
+                    goal: &goal,
+                    ball: &brief,
+                    answer: &reply.text,
+                    deadline,
+                },
+            )
+        };
         if let Some(a) = applied {
             verdict.passed = verdict.passed && a.pass;
             verdict.checks.insert(0, a);
@@ -398,6 +408,7 @@ fn run_inner(store: &Store, id: &str) -> Result<String, String> {
             Decision::Return(note) => ("return", note.clone()),
             Decision::Stop => ("return", "stopped by the server".into()),
             Decision::Expire(r) => ("return", r.clone()),
+            Decision::Fail(r) => ("return", r.clone()),
         };
         prog.trail
             .push(if verdict_s == "point" { '*' } else { '.' });
@@ -421,13 +432,17 @@ fn run_inner(store: &Store, id: &str) -> Result<String, String> {
         store.progress(id, &prog)?;
         match decision {
             Decision::Point => {
-                store.finish(
-                    id,
-                    "point",
-                    Some(&reply.text),
-                    &format!("point on rally {n}"),
-                )?;
+                let reason = if unverified {
+                    format!("UNVERIFIED point on rally {n}: no referee checks (unverified = true)")
+                } else {
+                    format!("point on rally {n}")
+                };
+                store.finish(id, "point", Some(&reply.text), &reason)?;
                 return Ok("point".into());
+            }
+            Decision::Fail(r) => {
+                store.finish(id, "error", None, &r)?;
+                return Ok("error".into());
             }
             Decision::Stop => {
                 store.finish(id, "stopped", None, "stopped by the server")?;
@@ -503,25 +518,48 @@ fn decide(
                 .model
                 .as_mut()
                 .ok_or("model server without a player")?;
-            match model.play(&prompt, &sctx) {
-                Ok(r) => {
-                    let t = r.text.trim();
-                    if verdict.passed && t.to_ascii_uppercase().starts_with("ACCEPT") {
-                        Ok(Decision::Point)
-                    } else {
-                        Ok(Decision::Return(t.to_string()))
+            if !verdict.passed {
+                // Only a correction is at stake: a reviewer failure falls back to the
+                // referee output alone (never a point: the referee failed).
+                return Ok(match model.play(&prompt, &sctx) {
+                    Ok(r) => Decision::Return(r.text.trim().to_string()),
+                    Err(e) => {
+                        store.event(id, "server_error", json!({"error": proc::head(&e, 300)}))?;
+                        Decision::Return(String::new())
+                    }
+                });
+            }
+            // The referee passed and the server must confirm the point. A reviewer that
+            // cannot answer must not grant it: retry, then fail closed.
+            let mut last_err = String::new();
+            for attempt in 1..=REVIEW_ATTEMPTS {
+                match model.play(&prompt, &sctx) {
+                    Ok(r) => {
+                        let t = r.text.trim();
+                        return Ok(if referee::first_word(t) == "ACCEPT" {
+                            Decision::Point
+                        } else {
+                            Decision::Return(t.to_string())
+                        });
+                    }
+                    Err(e) => {
+                        store.event(
+                            id,
+                            "server_error",
+                            json!({"attempt": attempt, "error": proc::head(&e, 300)}),
+                        )?;
+                        last_err = e;
+                        if attempt < REVIEW_ATTEMPTS && Instant::now() < deadline {
+                            std::thread::sleep(Duration::from_millis(500 * attempt as u64));
+                        }
                     }
                 }
-                // The server model failing must not cost the point: fall back to the referee.
-                Err(e) => {
-                    store.event(id, "server_error", json!({"error": proc::head(&e, 300)}))?;
-                    Ok(if verdict.passed {
-                        Decision::Point
-                    } else {
-                        Decision::Return(String::new())
-                    })
-                }
             }
+            Ok(Decision::Fail(format!(
+                "the model server could not review the ball after {REVIEW_ATTEMPTS} attempts \
+                 (fail closed, no point): {}",
+                proc::head(&last_err, 300)
+            )))
         }
         ServerMode::External => {
             let payload = json!({

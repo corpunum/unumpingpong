@@ -334,6 +334,10 @@ pub struct TableSpec {
     pub server: Option<ServerSpec>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lease: Option<Lease>,
+    /// Opt-in for a table without referee checks: its answers score with no evidence,
+    /// and the point is recorded as unverified. Without it, a table needs at least one check.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub unverified: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
@@ -353,6 +357,9 @@ pub struct Defaults {
     pub referee: Vec<CheckSpec>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub apply: Option<Apply>,
+    /// Default for `unverified` (see TableSpec).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unverified: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
@@ -458,6 +465,9 @@ impl MatchFile {
             if t.apply.is_none() {
                 t.apply = d.apply.clone();
             }
+            if !t.unverified {
+                t.unverified = d.unverified.unwrap_or(false);
+            }
             let base = d.lease.clone().unwrap_or_default();
             t.lease = Some(t.lease.clone().unwrap_or_default().merged(&base));
             validate_table(&t)?;
@@ -501,6 +511,14 @@ pub fn validate_table(t: &TableSpec) -> Result<(), String> {
     if t.ball.trim().is_empty() && t.goal.trim().is_empty() {
         return Err(format!(
             "table '{}': needs a ball (brief) or a goal",
+            t.name
+        ));
+    }
+    if t.referee.is_empty() && !t.unverified {
+        return Err(format!(
+            "table '{}': no referee checks, so nothing would verify an answer. Add a check \
+             (command, file_exists, http_ok, json_path_equals, judge) or set `unverified = true` \
+             to accept answers without evidence",
             t.name
         ));
     }
@@ -562,6 +580,7 @@ name = "b"
 after = "a"
 ball = "use {{prev.answer}}"
 lease = { max_rallies = 7 }
+unverified = true
 [table.player]
 kind = "claude"
 model = "sonnet"
@@ -608,6 +627,7 @@ args = ["--permission-mode", "acceptEdits"]
             .contains("judge"));
         let cycle = r#"
 [defaults]
+unverified = true
 player = { kind = "shell", command = "cat" }
 [[table]]
 name = "a"
@@ -629,5 +649,14 @@ ball = "y"
             .contains("unknown field"));
         let no_player = r#"{"name":"x","ball":"b"}"#;
         assert!(MatchFile::parse(no_player).unwrap().resolve().is_err());
+        // No referee: rejected unless the table opts in to unverified points.
+        let unchecked = r#"{"name":"x","ball":"b","player":{"kind":"shell","command":"cat"}}"#;
+        assert!(MatchFile::parse(unchecked)
+            .unwrap()
+            .resolve()
+            .unwrap_err()
+            .contains("unverified = true"));
+        let opted = r#"{"name":"x","ball":"b","unverified":true,"player":{"kind":"shell","command":"cat"}}"#;
+        assert!(MatchFile::parse(opted).unwrap().resolve().unwrap()[0].unverified);
     }
 }

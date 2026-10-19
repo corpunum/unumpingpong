@@ -155,6 +155,7 @@ fn serial_chain_passes_the_point_downstream() {
         r#"
 [defaults]
 player = {{ kind = "shell", command = ["sh", "{}"] }}
+unverified = true
 
 [[table]]
 name = "plan"
@@ -199,6 +200,7 @@ referee = [{{ kind = "command", run = "false" }}]
 name = "b"
 after = "a"
 ball = "y"
+unverified = true
 "#,
         fake("echo-agent.sh")
     );
@@ -306,4 +308,173 @@ referee = [{{ kind = "command", run = "grep -qx 42 answer.txt" }}]
     assert_eq!(lines[2]["verdict"], "point");
     assert_eq!(lines[0]["table"], "e");
     assert!(lines[0]["referee"].is_array());
+}
+
+// ---------------------------------------------------------------- no false points (v0.1.1)
+
+fn script(dir: &Path, name: &str, body: &str) -> String {
+    let p = dir.join(name);
+    std::fs::write(&p, body).unwrap();
+    std::fs::set_permissions(&p, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    p.to_string_lossy().into_owned()
+}
+
+#[test]
+fn a_no_op_answer_never_scores() {
+    // The player only claims success; the referee looks for the file it never wrote.
+    let d = tempfile::tempdir().unwrap();
+    let toml = r#"
+[[table]]
+name = "claims"
+ball = "write answer.txt"
+lease = { max_rallies = 3 }
+player = { kind = "shell", command = "cat >/dev/null; echo 'Done! All tests pass.'" }
+referee = [{ kind = "file_exists", path = "answer.txt" }]
+"#;
+    let (store, rows) = run_match(d.path(), toml, 1);
+    assert_eq!(rows[0].status, "lost");
+    assert_eq!(rows[0].trail, "...");
+    assert!(store
+        .rallies(&rows[0].id)
+        .unwrap()
+        .iter()
+        .all(|r| !r.passed));
+}
+
+#[test]
+fn a_table_without_checks_needs_the_opt_in_and_says_unverified() {
+    let d = tempfile::tempdir().unwrap();
+    let f = d.path().join("m.toml");
+    std::fs::write(
+        &f,
+        "[[table]]\nname = \"x\"\nball = \"b\"\nplayer = { kind = \"shell\", command = \"cat\" }\n",
+    )
+    .unwrap();
+    let e = MatchFile::load(&f).unwrap().resolve().unwrap_err();
+    assert!(e.contains("no referee checks"), "{e}");
+    // A JSON table over the API is held to the same rule.
+    let store = Store::open(&d.path().join("upp.db")).unwrap();
+    assert!(api::create_json(
+        &store,
+        serde_json::json!({"name": "x", "ball": "b", "player": {"kind": "shell", "command": "cat"}})
+    )
+    .is_err());
+    // With the opt-in it scores, and the point says it is unverified.
+    let toml = r#"
+[[table]]
+name = "opted"
+ball = "b"
+unverified = true
+player = { kind = "shell", command = "cat" }
+"#;
+    let (store, rows) = run_match(d.path(), toml, 1);
+    assert_eq!(rows[0].status, "point");
+    assert!(
+        rows[0].reason.as_deref().unwrap().contains("UNVERIFIED"),
+        "{:?}",
+        rows[0]
+    );
+    let r = store.rallies(&rows[0].id).unwrap();
+    assert_eq!(r[0].checks[0]["kind"], "unverified");
+}
+
+#[test]
+fn a_reviewer_outage_fails_closed() {
+    // The referee passes on rally 1, review_points asks the model server to confirm,
+    // and the server is down. That must not become a point.
+    let d = tempfile::tempdir().unwrap();
+    let toml = format!(
+        r#"
+[[table]]
+name = "reviewed"
+ball = "x"
+player = {{ kind = "shell", command = ["sh", "{}"], env = {{ FAKE_PASS_ON = "1" }} }}
+referee = [{{ kind = "command", run = "grep -qx 42 answer.txt" }}]
+[table.server]
+mode = "model"
+review_points = true
+player = {{ kind = "shell", command = "echo 'reviewer down' >&2; exit 7" }}
+"#,
+        fake("fake-coder.sh")
+    );
+    let (store, rows) = run_match(d.path(), &toml, 1);
+    assert_eq!(rows[0].status, "error", "{:?}", rows[0]);
+    assert!(rows[0].reason.as_deref().unwrap().contains("fail closed"));
+    assert!(rows[0].result.is_none());
+    let r = store.rallies(&rows[0].id).unwrap();
+    assert!(r[0].passed, "the referee itself passed");
+    assert_ne!(r[0].verdict, "point");
+    // A reviewer that says "ACCEPTED?" or anything but the word ACCEPT does not score either.
+    let d = tempfile::tempdir().unwrap();
+    let toml = format!(
+        r#"
+[[table]]
+name = "picky"
+ball = "x"
+lease = {{ max_rallies = 2 }}
+player = {{ kind = "shell", command = ["sh", "{}"], env = {{ FAKE_PASS_ON = "1" }} }}
+referee = [{{ kind = "command", run = "grep -qx 42 answer.txt" }}]
+[table.server]
+mode = "model"
+review_points = true
+player = {{ kind = "shell", command = "echo 'ACCEPTABLE? No: handle negative numbers.'" }}
+"#,
+        fake("fake-coder.sh")
+    );
+    let (_s, rows) = run_match(d.path(), &toml, 1);
+    assert_eq!(rows[0].status, "lost", "{:?}", rows[0]);
+}
+
+#[test]
+fn a_nonzero_exit_is_a_fault_even_when_the_work_is_right() {
+    // The player writes the right file but exits 1: a crashed turn, not an answer.
+    let d = tempfile::tempdir().unwrap();
+    let toml = r#"
+[[table]]
+name = "crash"
+ball = "x"
+lease = { max_rallies = 2 }
+player = { kind = "shell", command = "cat >/dev/null; echo 42 > answer.txt; echo done; exit 1" }
+referee = [{ kind = "command", run = "grep -qx 42 answer.txt" }]
+"#;
+    let (store, rows) = run_match(d.path(), toml, 1);
+    assert_eq!(rows[0].status, "lost");
+    assert_eq!(rows[0].trail, "!!");
+    assert!(store
+        .rallies(&rows[0].id)
+        .unwrap()
+        .iter()
+        .all(|r| r.verdict == "fault"));
+}
+
+#[test]
+fn a_failed_codex_turn_is_a_fault() {
+    // A fake `codex` writes the right file and an agent message, then reports turn.failed.
+    let d = tempfile::tempdir().unwrap();
+    let bin = script(
+        d.path(),
+        "fake-codex.sh",
+        r#"#!/bin/sh
+cat >/dev/null
+echo 42 > answer.txt
+echo '{"type":"thread.started","thread_id":"th-1"}'
+echo '{"type":"item.completed","item":{"type":"agent_message","text":"Done, tests pass."}}'
+echo '{"type":"turn.failed","error":{"message":"stream disconnected before completion"}}'
+"#,
+    );
+    let toml = format!(
+        r#"
+[[table]]
+name = "codex"
+ball = "x"
+lease = {{ max_rallies = 1 }}
+player = {{ kind = "codex", bin = "{bin}" }}
+referee = [{{ kind = "command", run = "grep -qx 42 answer.txt" }}]
+"#
+    );
+    let (store, rows) = run_match(d.path(), &toml, 1);
+    assert_eq!(rows[0].status, "lost");
+    let r = store.rallies(&rows[0].id).unwrap();
+    assert_eq!(r[0].verdict, "fault");
+    assert!(r[0].note.contains("stream disconnected"), "{}", r[0].note);
 }

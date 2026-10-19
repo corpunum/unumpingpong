@@ -176,6 +176,19 @@ impl Player for AgentPlayer {
                 out.duration_ms as f64 / 1000.0
             ));
         }
+        // Every tool must exit 0: a nonzero exit is a failed turn even when it printed
+        // something that parses (a partial answer, an error object, a stale result).
+        if !out.ok() {
+            return Err(format!(
+                "{} exited with {}: {}\n{}",
+                self.flavor.bin(),
+                out.code
+                    .map(|c| c.to_string())
+                    .unwrap_or_else(|| "a signal".into()),
+                proc::tail(out.stderr.trim(), 1500),
+                proc::tail(out.stdout.trim(), 500)
+            ));
+        }
         let parsed = match self.flavor {
             Flavor::Claude => parse_claude(&out.stdout),
             Flavor::Codex => parse_codex(&out.stdout, last.as_deref()),
@@ -280,6 +293,10 @@ pub fn parse_codex(stdout: &str, last_message: Option<&str>) -> Result<Reply, St
             _ => {}
         }
     }
+    // A failed turn is a failure even if an agent message (or -o file) was produced.
+    if let Some(e) = error {
+        return Err(format!("codex turn failed: {e}"));
+    }
     let text = last_message
         .map(|s| s.to_string())
         .filter(|s| !s.trim().is_empty())
@@ -289,7 +306,7 @@ pub fn parse_codex(stdout: &str, last_message: Option<&str>) -> Result<Reply, St
             r.text = t;
             Ok(r)
         }
-        None => Err(error.unwrap_or_else(|| "no agent message in codex output".into())),
+        None => Err("no agent message in codex output".into()),
     }
 }
 
@@ -367,8 +384,11 @@ pub fn parse_opencode(stdout: &str) -> Result<Reply, String> {
             _ => {}
         }
     }
+    if let Some(e) = error {
+        return Err(format!("opencode error: {e}"));
+    }
     if texts.is_empty() {
-        return Err(error.unwrap_or_else(|| "no text in opencode output".into()));
+        return Err("no text in opencode output".into());
     }
     r.text = texts.join("\n");
     Ok(r)
@@ -410,6 +430,55 @@ mod tests {
         assert_eq!(r.text, "hi");
         assert_eq!(r.session.as_deref(), Some("th-1"));
         assert_eq!(parse_codex(out, Some("from -o")).unwrap().text, "from -o");
+    }
+
+    #[test]
+    fn failed_turns_never_count_as_answers() {
+        // codex: text was seen (and -o written), but the turn failed.
+        let out = "{\"type\":\"thread.started\",\"thread_id\":\"th-1\"}\n\
+                   {\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"All done!\"}}\n\
+                   {\"type\":\"turn.failed\",\"error\":{\"message\":\"stream disconnected\"}}\n";
+        let e = parse_codex(out, Some("All done!")).unwrap_err();
+        assert!(e.contains("stream disconnected"), "{e}");
+        let out =
+            "{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"ok\"}}\n\
+                   {\"type\":\"error\",\"message\":\"quota exceeded\"}\n";
+        assert!(parse_codex(out, None).unwrap_err().contains("quota"));
+        // opencode: an error event after some text.
+        let o = "{\"type\":\"text\",\"part\":{\"text\":\"partial\"}}\n\
+                 {\"type\":\"error\",\"error\":{\"message\":\"provider down\"}}\n";
+        assert!(parse_opencode(o).unwrap_err().contains("provider down"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_nonzero_exit_is_a_fault_even_with_parseable_output() {
+        // A fake `claude` that prints a valid success result and then exits 1.
+        let d = tempfile::tempdir().unwrap();
+        let bin = d.path().join("fake-claude.sh");
+        std::fs::write(
+            &bin,
+            "#!/bin/sh\ncat >/dev/null\necho '{\"type\":\"result\",\"is_error\":false,\"result\":\"done\",\"session_id\":\"s\"}'\nexit 1\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&bin, std::os::unix::fs::PermissionsExt::from_mode(0o755))
+            .unwrap();
+        let mut p = AgentPlayer::new(
+            Flavor::Claude,
+            AgentCli {
+                bin: Some(bin.to_string_lossy().into_owned()),
+                ..Default::default()
+            },
+        );
+        let ctx = PlayCtx {
+            table_id: "t".into(),
+            rally: 1,
+            cwd: d.path().to_path_buf(),
+            deadline: std::time::Instant::now() + std::time::Duration::from_secs(20),
+            session_key: "t".into(),
+        };
+        let e = p.play("ball", &ctx).unwrap_err();
+        assert!(e.contains("exited with 1"), "{e}");
     }
 
     #[test]
