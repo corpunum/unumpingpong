@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Claude Code player forwards the per-rally `effort` as `--effort` (it was ignored for Claude); tested with a fake CLI over two rallies (resume + effort).
+- Benchmark: `bench.py --player claude|codex` runs arm A (one CLI session) and arm B (tables) with Claude Haiku and Luna-low; results, card and README updated.
+
 ## v0.2.0 (2026-10-19) - Cards and a persistent orchestrator
 
 The model to copy is the session that worked: one long-lived orchestrator reading compact

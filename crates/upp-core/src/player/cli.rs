@@ -160,6 +160,12 @@ impl Player for AgentPlayer {
             argv.splice(pos..pos, ["--session-id".to_string(), id.clone()]);
             gemini_new = Some(id);
         }
+        if self.flavor == Flavor::Claude {
+            if let Some(e) = &ctx.effort {
+                // claude --effort low|medium|high|xhigh|max (the ball is on stdin, so the end is free)
+                argv.extend(["--effort".to_string(), e.clone()]);
+            }
+        }
         if self.flavor == Flavor::Codex {
             if let Some(e) = &ctx.effort {
                 // codex reads config overrides: -c model_reasoning_effort="low"
@@ -504,6 +510,51 @@ mod tests {
         );
         let e = p.play("ball", &ctx).unwrap_err();
         assert!(e.contains("exited with 1"), "{e}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn claude_resumes_the_session_and_gets_the_rally_effort() {
+        let d = tempfile::tempdir().unwrap();
+        let log = d.path().join("argv.log");
+        let bin = d.path().join("fake-claude.sh");
+        std::fs::write(
+            &bin,
+            format!(
+                "#!/bin/sh\ncat >/dev/null\necho \"$@\" >> {}\necho '{{\"type\":\"result\",\"is_error\":false,\"result\":\"ok\",\"session_id\":\"sess-1\"}}'\n",
+                log.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&bin, std::os::unix::fs::PermissionsExt::from_mode(0o755))
+            .unwrap();
+        let mut p = AgentPlayer::new(
+            Flavor::Claude,
+            AgentCli {
+                bin: Some(bin.to_string_lossy().into_owned()),
+                model: Some("haiku".into()),
+                ..Default::default()
+            },
+        );
+        for (n, effort) in [(1, "low"), (2, "high")] {
+            let mut ctx = PlayCtx::new(
+                "t",
+                n,
+                d.path().to_path_buf(),
+                std::time::Instant::now() + std::time::Duration::from_secs(20),
+                "t",
+            );
+            ctx.effort = Some(effort.into());
+            p.play("ball", &ctx).unwrap();
+        }
+        let calls: Vec<String> = std::fs::read_to_string(&log)
+            .unwrap()
+            .lines()
+            .map(String::from)
+            .collect();
+        assert_eq!(calls.len(), 2);
+        assert!(calls[0].contains("--effort low") && !calls[0].contains("--resume"));
+        assert!(calls[1].contains("--resume sess-1") && calls[1].contains("--effort high"));
     }
 
     #[test]
