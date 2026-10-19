@@ -15,23 +15,22 @@ a **daemon** with a local HTTP/JSON API and Server-Sent Events (`uppd`), an **MC
 (`upp mcp`), and an **Agent Skill**. No GPU, model or network dependency of its own; nothing in
 it is specific to one agent, model vendor or operating system.
 
-```
- ● UnumPingPong   8 tables   ▶ 2 live   ✔ 5 points   ✘ 0   rallies 12   tokens 0   ⏱ 0:06
-╭ tables · run rfdb0bb6f67 ─────────────────────────────────────────────────────────╮
-│TABLE     PLAYER STATUS    SERVER⇄PLAYER RALLY TRAIL      LEASE        TOKENS      │
-│auth-bug  shell  point        ✔ point    3/4   ●●●·        0:04 ▯▯▯▯▯  0           │
-│parser    shell  point        ✔ point    2/4   ●●··        0:04 ▯▯▯▯▯  0           │
-│docs      shell  point        ✔ point    1/4   ●···        0:02 ▯▯▯▯▯  0           │
-│flaky-net shell  point        ✔ point    2/4   ●●··        0:02 ▯▯▯▯▯  0           │
-│perf      shell  running   ▌     ┊●    ▐ 2/3   ●●·         0:04 ▯▯▯▯▯  0           │
-│plan      shell  point        ✔ point    1/4   ●···        0:01 ▯▯▯▯▯  0           │
-│↳ build   shell  running   ▌     ┊●    ▐ 1/4   ●···        0:02 ▯▯▯▯▯  0           │
-│↳ ship    shell  queued     · waiting ·  0/4   ····        0:00 ▯▯▯▯▯  0           │
-╰───────────────────────────────────────────────────────────────────────────────────╯
-```
+![UnumPingPong: a model-free demo, then a real local model at three tables](docs/media/pingpong.gif)
 
-*`upp watch` during the model-free demo (`examples/demo/demo.toml`, scripted agents, real
-referee commands). A recorded video of real models at the tables is planned.*
+*Real terminal recording (asciinema), nothing animated. Scene 1 is the model-free demo (scripted
+agents, real referee commands): a cap of 4 leaves one table queued, returned balls carry the
+referee output, one table is lost after its rallies, and `plan -> build -> ship` unlocks in
+series. Scene 2 is a real run of `examples/three-functions.toml` against a local model, shown at
+3x speed (88 s real time). On a 6-task benchmark both a single agent loop and UnumPingPong solved
+6/6 with unit-test referees; the tables used 4.6x fewer tokens (28.8k vs 132.6k) but took 1.6x
+the wall time (580 s vs 354 s). See [Benchmark](#benchmark).*
+
+<details>
+<summary>Benchmark result card</summary>
+
+![benchmark card: 6/6 vs 6/6 points, 28,813 vs 132,635 tokens, 580 s vs 354 s](docs/media/pingpong-result.png)
+
+</details>
 
 ## Why
 
@@ -55,6 +54,15 @@ mechanism instead of a habit:
 - **Every rally is recorded.** Ball, answer, referee checks, server note, tokens, cost, timing,
   session id: one append-only row per rally. `upp export` turns it into JSON lines for
   analysis or for training briefing models, routers and judges.
+
+## Benchmark
+
+[`bench/`](bench/) solves the same six small Python tasks twice with the same local model:
+(A) one agent loop, a single conversation where the model self-checks and says DONE, and (B)
+UnumPingPong tables (fresh small context per ball, referee feedback, 3 in parallel). Both are
+scored afterwards by the same unit tests. Result (one run, honest): both 6/6; B used 4.6x fewer
+tokens, A's "done" was never wrong on this easy set, and B was slower in wall time. Details,
+caveats and the reproduce command are in [bench/results.md](bench/results.md).
 
 ## Concepts
 

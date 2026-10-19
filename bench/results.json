@@ -1,0 +1,170 @@
+{
+ "model": "openai/qwen3.8-flash-next-uncensored-lean",
+ "base_url": "http://127.0.0.1:8080/v1",
+ "tasks": [
+  "calc",
+  "duration",
+  "intervals",
+  "lru",
+  "semver",
+  "wrap"
+ ],
+ "date": "2026-10-19",
+ "temperature": 0.2,
+ "A": {
+  "arm": "A single agent loop",
+  "points": 6,
+  "tasks": 6,
+  "per_task": {
+   "calc": true,
+   "duration": true,
+   "intervals": true,
+   "lru": true,
+   "semver": true,
+   "wrap": true
+  },
+  "turns": 19,
+  "shell_runs": 8,
+  "wall_s": 354.4,
+  "prompt_tokens": 118114,
+  "completion_tokens": 14521,
+  "tokens": 132635,
+  "declared_done": true,
+  "claimed_done_but_failed": false,
+  "failed_when_claimed_done": 0,
+  "log": [
+   {
+    "turn": 1,
+    "wrote_files": false,
+    "runs": 0,
+    "tokens_out": 5584
+   },
+   {
+    "turn": 2,
+    "wrote_files": false,
+    "runs": 0,
+    "tokens_out": 1005
+   },
+   {
+    "turn": 3,
+    "wrote_files": true,
+    "runs": 0,
+    "tokens_out": 805
+   },
+   {
+    "turn": 4,
+    "wrote_files": false,
+    "runs": 1,
+    "tokens_out": 198
+   },
+   {
+    "turn": 5,
+    "wrote_files": true,
+    "runs": 0,
+    "tokens_out": 836
+   },
+   {
+    "turn": 6,
+    "wrote_files": false,
+    "runs": 1,
+    "tokens_out": 861
+   },
+   {
+    "turn": 7,
+    "wrote_files": true,
+    "runs": 0,
+    "tokens_out": 274
+   },
+   {
+    "turn": 8,
+    "wrote_files": false,
+    "runs": 0,
+    "tokens_out": 78
+   },
+   {
+    "turn": 9,
+    "wrote_files": false,
+    "runs": 1,
+    "tokens_out": 122
+   },
+   {
+    "turn": 10,
+    "wrote_files": false,
+    "runs": 0,
+    "tokens_out": 61
+   },
+   {
+    "turn": 11,
+    "wrote_files": false,
+    "runs": 0,
+    "tokens_out": 59
+   },
+   {
+    "turn": 12,
+    "wrote_files": false,
+    "runs": 1,
+    "tokens_out": 96
+   },
+   {
+    "turn": 13,
+    "wrote_files": true,
+    "runs": 0,
+    "tokens_out": 379
+   },
+   {
+    "turn": 14,
+    "wrote_files": false,
+    "runs": 1,
+    "tokens_out": 148
+   },
+   {
+    "turn": 15,
+    "wrote_files": true,
+    "runs": 0,
+    "tokens_out": 766
+   },
+   {
+    "turn": 16,
+    "wrote_files": false,
+    "runs": 1,
+    "tokens_out": 157
+   },
+   {
+    "turn": 17,
+    "wrote_files": false,
+    "runs": 1,
+    "tokens_out": 2978
+   },
+   {
+    "turn": 18,
+    "wrote_files": false,
+    "runs": 1,
+    "tokens_out": 90
+   },
+   {
+    "turn": 19,
+    "wrote_files": false,
+    "runs": 0,
+    "tokens_out": 24
+   }
+  ]
+ },
+ "B": {
+  "arm": "B UnumPingPong tables",
+  "points": 6,
+  "tasks": 6,
+  "per_task": {
+   "calc": true,
+   "duration": true,
+   "intervals": true,
+   "lru": true,
+   "semver": true,
+   "wrap": true
+  },
+  "rallies": 6,
+  "wall_s": 579.5,
+  "prompt_tokens": 3422,
+  "completion_tokens": 25391,
+  "tokens": 28813
+ }
+}
