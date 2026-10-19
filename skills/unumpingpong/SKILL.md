@@ -85,17 +85,52 @@ upp answer fix-parser stop
 Write returns as one precise correction or the next step. Never accept a ball whose referee
 failed (it is refused anyway).
 
+## Be the orchestrator: cards, not transcripts
+
+Players end every answer with a result card (`done`, `summary`, `evidence`, `open_issues`,
+`artifacts`); the engine adds tokens, elapsed time, the referee verdict with an output tail,
+and provenance (the git tree the referee checked). Read cards; fetch a transcript only when a
+card is not enough.
+
+With the MCP server (`upp mcp`) configured, the loop is:
+
+1. `table_create` with `server: {mode: "external"}` for each task (absolute `cwd`; a
+   `worktree: {repo}` per coding table keeps workers apart).
+2. `cards_wait` (no `since`): returns at once with the cards that need an answer, else blocks
+   until the next card from any table. Keep `cursor`, pass it as `since` next time.
+3. `card_answer` for each `needs_answer` card: `accept` (+ `next` to chain the next ball),
+   `return` with one precise correction from `referee.tail`, `open` a new table, or `stop`.
+   Never sit on one table while others have cards waiting.
+4. `transcript(table, rally)` only when needed. `integrate {run, check}` at the end for
+   worktree tables.
+
+CLI equivalents: `upp cards --wait 60`, `upp answer T accept --next "..."`, `upp transcript T
+--rally 2`, `upp integrate --check "cargo test"`. Without an outside agent, give the match an
+`[orchestrator] player = {...}` and any model plays this role.
+
+## Split work: sub-tables
+
+Inside a table, a player can open sub-tables: `upp create sub.toml --parent "$UPP_TABLE"` (or
+MCP `table_create` with `parent`). They inherit player and cwd, need their own referee, and the
+parent's rally waits for them. Depth cap: `max_depth` (default 3).
+
+## Leases are guards, not budgets
+
+`lease` (wall time, rallies, optional tokens/cost) only stops runaways. The defaults (2 h, 10
+rallies) are generous on purpose. Do not plan work around them; plan around points.
+
 ## MCP
 
-If the `unumpingpong` MCP server is configured (`upp mcp`), use the tools instead of the CLI:
-`table_create` (`match` object or `file`), `table_wait` (blocks until a ball waits or tables end;
-prefer it to polling), `table_status`, `table_list`, `ball_answer`, `table_stop`. Use absolute
-`cwd` paths.
+Tools: `table_create`, `cards_wait`, `card_answer`, `transcript`, `table_status` (cards per
+rally, token split), `table_list`, `table_wait`, `ball_answer`, `table_stop` (kills the running
+player call), `integrate`. Use absolute `cwd` paths.
 
 ## Results
 
 - `point`: `result` holds the accepted answer; `{{prev.answer}}` passes it downstream.
 - `lost`: max rallies without a point. Read the last referee output in `upp status`; re-brief or
   switch player.
-- `expired`: wall/token/cost lease used up. `skipped`: an upstream table did not score.
+- `expired`: a runaway guard tripped (wall/token/cost lease). `skipped`: an upstream table did
+  not score. `stopped`: stopped by you or the server; a crashed scheduler's tables are requeued
+  instead and resume after their last rally (`upp resume`).
 - `error`: setup failed, bad cwd, or the player could not start (see `reason`).

@@ -19,11 +19,17 @@ USAGE:
 API:
   GET  /health                        version, store, parallel cap
   GET  /api/tables[?all=1&run=ID]     table summaries (active by default)
-  POST /api/tables                    create: match JSON ({defaults, table:[...]}) or a single table
-  GET  /api/tables/{id}[?full=1]      one table with rallies and the pending ball
-  POST /api/tables/{id}/stop          stop before the next rally
-  POST /api/tables/{id}/answer        {verdict: accept|return|stop, note} as the external server
+  POST /api/tables[?parent=ID]        create: match JSON ({defaults, table:[...]}) or a single table;
+                                      ?parent opens sub-tables of a running table
+  GET  /api/tables/{id}[?full=1]      one table: rallies as result cards, token split, pending ball
+  GET  /api/tables/{id}/cards         the table's cards
+  GET  /api/tables/{id}/transcript[?rally=N]  full balls and answers (on demand)
+  POST /api/tables/{id}/stop          stop: the running player call is killed
+  POST /api/tables/{id}/answer        {verdict: accept|return|stop, note, next?, open?} as the server
   GET  /api/pending                   balls waiting for an external server
+  GET  /api/cards?tables=a,b&run=R&since=N&timeout=60
+                                      block until a card arrives (the orchestrator inbox)
+  POST /api/integrate                 {run, into?, check?}: merge verified worktree points
   GET  /api/wait?tables=a,b&timeout=60  block until a ball waits or the tables end
   GET  /api/events[?since=ID]         Server-Sent Events (one `data:` JSON per event)
   GET  /api/export[?run=ID]           every rally as JSON lines
@@ -202,7 +208,52 @@ fn handle(mut req: Request, db: &Path, parallel: usize) {
             (Method::Post, ["api", "tables"]) => {
                 let v: Value =
                     serde_json::from_str(&body).map_err(|e| bad(format!("invalid JSON: {e}")))?;
-                api::create_json(&store, v).map_err(bad)
+                match qget("parent") {
+                    Some(p) => api::create_child(&store, &p, v).map_err(bad),
+                    None => api::create_json(&store, v).map_err(bad),
+                }
+            }
+            (Method::Get, ["api", "tables", id, "cards"]) => {
+                let t = store.resolve(id).map_err(nf)?;
+                Ok(json!({"cards": store.cards_of(&t.id).map_err(bad)?}))
+            }
+            (Method::Get, ["api", "tables", id, "transcript"]) => {
+                let rally = qget("rally").and_then(|s| s.parse().ok());
+                api::transcript(&store, id, rally).map_err(nf)
+            }
+            (Method::Get, ["api", "cards"]) => {
+                let q = api::CardQuery {
+                    tables: qget("tables")
+                        .map(|s| {
+                            s.split(',')
+                                .filter(|x| !x.is_empty())
+                                .map(String::from)
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                    run: qget("run"),
+                    since: qget("since").and_then(|s| s.parse().ok()),
+                    timeout: Duration::from_secs(
+                        qget("timeout")
+                            .and_then(|s| s.parse().ok())
+                            .unwrap_or(60u64)
+                            .min(600),
+                    ),
+                };
+                api::cards_wait(db, &q).map_err(bad)
+            }
+            (Method::Post, ["api", "integrate"]) => {
+                let v: Value =
+                    serde_json::from_str(&body).map_err(|e| bad(format!("invalid JSON: {e}")))?;
+                api::integrate(
+                    &store,
+                    v["run"]
+                        .as_str()
+                        .ok_or_else(|| bad("run is required".into()))?,
+                    v["into"].as_str(),
+                    v["check"].as_str(),
+                )
+                .map_err(bad)
             }
             (Method::Get, ["api", "tables", id]) => {
                 let full = qget("full").is_some_and(|v| v == "1" || v == "true");
@@ -212,11 +263,13 @@ fn handle(mut req: Request, db: &Path, parallel: usize) {
             (Method::Post, ["api", "tables", id, "answer"]) => {
                 let v: Value =
                     serde_json::from_str(&body).map_err(|e| bad(format!("invalid JSON: {e}")))?;
-                api::answer(
+                api::card_answer(
                     &store,
                     id,
                     v["verdict"].as_str().unwrap_or(""),
                     v["note"].as_str().unwrap_or(""),
+                    v["next"].as_str(),
+                    v.get("open").filter(|o| o.is_object()),
                 )
                 .map_err(bad)
             }

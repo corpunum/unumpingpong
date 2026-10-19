@@ -25,18 +25,23 @@ impl ShellPlayer {
 
 impl Player for ShellPlayer {
     fn play(&mut self, ball: &str, ctx: &PlayCtx) -> Result<Reply, String> {
-        let mut env = self.env.clone();
-        env.insert("UPP_TABLE".into(), ctx.table_id.clone());
-        env.insert("UPP_RALLY".into(), ctx.rally.to_string());
+        let mut env = ctx.env_with(&self.env);
         env.insert("UPP_SESSION".into(), ctx.session_key.clone());
         env.insert("UPP_CWD".into(), ctx.cwd.to_string_lossy().into_owned());
-        let out = proc::run(
+        if let Some(e) = &ctx.effort {
+            env.entry("UPP_EFFORT".into()).or_insert_with(|| e.clone());
+        }
+        let out = proc::run_cancellable(
             &self.command.argv(),
             &ctx.cwd,
             Some(ball),
             &env,
             ctx.budget(self.timeout_secs, 900),
+            Some(&ctx.cancel),
         )?;
+        if out.cancelled {
+            return Err("player call cancelled (table stopped)".into());
+        }
         if out.timed_out {
             return Err(format!(
                 "player timed out after {:.1}s",

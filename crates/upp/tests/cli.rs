@@ -143,6 +143,9 @@ server = {{ mode = "external", timeout_secs = 30 }}
     // Rally 1 fails the referee; the outside server returns it with a note.
     let b = wait_pending(1);
     assert_eq!(b["payload"]["referee"]["passed"], false);
+    // The server gets a card and the referee output, not the transcript.
+    assert!(b["payload"]["card"]["summary"].is_string(), "{b}");
+    assert!(b["payload"].get("answer").is_none(), "{b}");
     let a = json_out(
         upp()
             .arg("--db")
@@ -215,6 +218,10 @@ fn mcp_server_creates_and_serves_tables() {
         "ball_answer",
         "table_stop",
         "table_wait",
+        "cards_wait",
+        "card_answer",
+        "transcript",
+        "integrate",
     ] {
         assert!(names.contains(&n), "{names:?}");
     }
@@ -256,4 +263,270 @@ fn mcp_server_creates_and_serves_tables() {
     assert_eq!(r["isError"], true);
     drop(m.child.stdin.take());
     let _ = m.child.wait();
+}
+
+fn spawn_mcp(dir: &Path) -> Mcp {
+    let mut child = upp()
+        .arg("--db")
+        .arg(dir.join("upp.db"))
+        .arg("mcp")
+        .current_dir(dir)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let out = BufReader::new(child.stdout.take().unwrap());
+    let mut m = Mcp { child, out, id: 0 };
+    m.call("initialize", json!({"protocolVersion": "2025-06-18"}));
+    m
+}
+
+#[test]
+fn claude_code_style_orchestration_over_mcp_cards() {
+    // The recipe from docs/integrations/claude-code.md: open external tables, then loop
+    // cards_wait -> card_answer, fetching a transcript only when a card is not enough.
+    let d = tempfile::tempdir().unwrap();
+    let mut m = spawn_mcp(d.path());
+    let mk = |name: &str| {
+        json!({
+            "name": name,
+            "ball": "write 42",
+            "cwd": d.path().join(name),
+            "player": {"kind": "shell", "command": ["sh", fake("fake-coder.sh")], "env": {"FAKE_CARD": "1"}},
+            "referee": [{"kind": "command", "run": "grep -qx 42 answer.txt"}],
+            "server": {"mode": "external"}
+        })
+    };
+    let r1 = m.tool("table_create", json!({"match": mk("one")}));
+    let r2 = m.tool("table_create", json!({"match": mk("two")}));
+    let ids = [
+        r1["tables"][0]["id"].as_str().unwrap().to_string(),
+        r2["tables"][0]["id"].as_str().unwrap().to_string(),
+    ];
+    let mut answered = 0;
+    let mut points = 0;
+    let mut since: Option<i64> = None;
+    let t0 = Instant::now();
+    while points < 2 {
+        assert!(t0.elapsed() < Duration::from_secs(30), "stalled");
+        let mut args = json!({"tables": ids, "timeout_secs": 20});
+        if let Some(s) = since {
+            args["since"] = json!(s);
+        }
+        let w = m.tool("cards_wait", args);
+        since = w["cursor"].as_i64();
+        for c in w["cards"].as_array().unwrap() {
+            assert!(c.get("answer").is_none());
+            assert!(!c.to_string().contains("SECRET-BODY-LINE"));
+            if c["kind"] == "final" {
+                if c["status"] == "point" {
+                    points += 1;
+                }
+                continue;
+            }
+            if c["needs_answer"] != true {
+                continue;
+            }
+            let table = c["table_id"].as_str().unwrap();
+            if c["referee"]["passed"] == true {
+                m.tool("card_answer", json!({"table": table, "verdict": "accept"}));
+            } else {
+                // Not enough in the card? Fetch the transcript of just this rally.
+                let tr = m.tool("transcript", json!({"table": table, "rally": c["rally"]}));
+                assert!(tr["rallies"][0]["answer"]
+                    .as_str()
+                    .unwrap()
+                    .contains("SECRET-BODY-LINE"));
+                m.tool(
+                    "card_answer",
+                    json!({"table": table, "verdict": "return", "note": "42, not 41"}),
+                );
+            }
+            answered += 1;
+        }
+    }
+    assert_eq!(answered, 4);
+    let st = m.tool("table_status", json!({"table": ids[0]}));
+    assert_eq!(st["status"], "point");
+    assert!(st["orchestrator_tokens"].as_u64().unwrap() > 0);
+    assert!(st["player_tokens"].is_u64());
+    drop(m.child.stdin.take());
+    let _ = m.child.wait();
+}
+
+#[test]
+fn a_player_opens_sub_tables_and_its_rally_waits_for_them() {
+    // The parent player opens a sub-table with `upp create --parent $UPP_TABLE` and answers
+    // at once; its referee checks the child's work, so the point proves the rally waited.
+    // One slot only: the waiting parent must free it for the child.
+    let d = tempfile::tempdir().unwrap();
+    let db = d.path().join("upp.db");
+    let child_dir = d.path().join("child");
+    std::fs::create_dir_all(&child_dir).unwrap();
+    let child = d.path().join("child.toml");
+    std::fs::write(
+        &child,
+        format!(
+            r#"
+[[table]]
+name = "kid"
+ball = "write 42"
+cwd = "{}"
+player = {{ kind = "shell", command = ["sh", "{}"] }}
+referee = [{{ kind = "command", run = "grep -qx 42 answer.txt" }}]
+"#,
+            child_dir.display(),
+            fake("fake-coder.sh")
+        ),
+    )
+    .unwrap();
+    let parent_cmd = format!(
+        "cat >/dev/null; \"{bin}\" create {child} --parent \"$UPP_TABLE\" > opened.json && echo opened a sub-table",
+        bin = env!("CARGO_BIN_EXE_upp"),
+        child = child.display()
+    );
+    let f = write_match(
+        d.path(),
+        &format!(
+            r#"
+[[table]]
+name = "parent"
+ball = "delegate"
+player = {{ kind = "shell", command = {cmd} }}
+referee = [{{ kind = "command", run = "grep -qx 42 child/answer.txt" }}]
+"#,
+            cmd = serde_json::to_string(&parent_cmd).unwrap()
+        ),
+    );
+    let o = upp()
+        .arg("--db")
+        .arg(&db)
+        .args(["run", "--parallel", "1"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    let out = String::from_utf8_lossy(&o.stdout);
+    assert!(
+        o.status.success(),
+        "{out}\n{}",
+        String::from_utf8_lossy(&o.stderr)
+    );
+    let st = json_out(upp().arg("--db").arg(&db).args(["status", "parent"]));
+    assert_eq!(st["trail"], "*", "{st}");
+    assert_eq!(st["children"][0]["name"], "kid");
+    assert_eq!(st["children"][0]["status"], "point");
+    let card = &st["rally_log"][0]["card"];
+    assert_eq!(card["children"][0]["status"], "point", "{card}");
+    let kid = json_out(upp().arg("--db").arg(&db).args(["status", "kid"]));
+    assert_eq!(
+        (kid["depth"].as_u64(), kid["trail"].as_str()),
+        (Some(1), Some(".*"))
+    );
+    assert!(out.contains("opened sub-tables"), "{out}");
+}
+
+#[test]
+fn a_crashed_run_resumes_after_its_last_rally() {
+    // `upp run` is killed (SIGKILL) while rally 2 hangs; `upp resume` continues from the
+    // recorded rally 1 and scores on rally 2.
+    let d = tempfile::tempdir().unwrap();
+    let db = d.path().join("upp.db");
+    let f = write_match(
+        d.path(),
+        &format!(
+            r#"
+[[table]]
+name = "crashy"
+ball = "write 42"
+player = {{ kind = "shell", command = ["sh", "{}"], env = {{ FAKE_HANG_ON = "2", FAKE_LOG = "log" }} }}
+referee = [{{ kind = "command", run = "grep -qx 42 answer.txt" }}]
+"#,
+            fake("fake-coder.sh")
+        ),
+    );
+    let mut run = upp()
+        .arg("--db")
+        .arg(&db)
+        .arg("run")
+        .arg(&f)
+        .stdout(Stdio::null())
+        .spawn()
+        .unwrap();
+    let t0 = Instant::now();
+    while !d.path().join(".fake-hung").exists() {
+        assert!(
+            t0.elapsed() < Duration::from_secs(20),
+            "rally 2 never started"
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    run.kill().unwrap();
+    run.wait().unwrap();
+    let st = json_out(upp().arg("--db").arg(&db).args(["status", "crashy"]));
+    assert_eq!(st["trail"], ".", "{st}");
+    let o = upp().arg("--db").arg(&db).arg("resume").output().unwrap();
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let st = json_out(upp().arg("--db").arg(&db).args(["status", "crashy"]));
+    assert_eq!(st["status"], "point", "{st}");
+    assert_eq!(st["trail"], ".*");
+    assert_eq!(st["resumes"], 1);
+    let ns: Vec<u64> = st["rally_log"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["n"].as_u64().unwrap())
+        .collect();
+    assert_eq!(ns, [1, 2]);
+    // The resumed rally 2 carried the referee output of rally 1 and the brief (shell
+    // players keep no session).
+    let b2 = std::fs::read_to_string(d.path().join("log/ball-2.txt")).unwrap();
+    assert!(
+        b2.contains("Failed checks") && b2.contains("Original ball"),
+        "{b2}"
+    );
+}
+
+#[test]
+fn cards_cli_and_parallel_auto_fallback() {
+    let d = tempfile::tempdir().unwrap();
+    let db = d.path().join("upp.db");
+    let f = write_match(
+        d.path(),
+        &format!(
+            r#"
+[defaults]
+max_parallel = "auto"
+[[table]]
+name = "c"
+ball = "x"
+player = {{ kind = "shell", command = ["sh", "{}"] }}
+referee = [{{ kind = "command", run = "grep -qx 42 answer.txt" }}]
+"#,
+            fake("fake-coder.sh")
+        ),
+    );
+    let o = upp()
+        .arg("--db")
+        .arg(&db)
+        .arg("run")
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(o.status.success());
+    assert!(String::from_utf8_lossy(&o.stderr).contains("--parallel auto -> 4"));
+    let c = json_out(upp().arg("--db").arg(&db).args(["cards", "--table", "c"]));
+    let kinds: Vec<&str> = c["cards"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x["kind"].as_str().unwrap())
+        .collect();
+    assert_eq!(kinds, ["rally", "rally", "final"]);
+    let t = json_out(
+        upp()
+            .arg("--db")
+            .arg(&db)
+            .args(["transcript", "c", "--rally", "2"]),
+    );
+    assert_eq!(t["rallies"].as_array().unwrap().len(), 1);
 }

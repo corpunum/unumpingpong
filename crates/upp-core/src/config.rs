@@ -38,15 +38,19 @@ impl Cmd {
     }
 }
 
-/// Bounds for one table. The first one reached ends the table as `expired`
+/// Runaway guards for one table. The first one reached ends the table as `expired`
 /// (or `lost` for `max_rallies`).
+///
+/// A lease is a minimal guard, not a scheduler: nothing schedules, prioritises or cuts
+/// work by budget. The defaults are deliberately generous (2 hours, 10 rallies, no token
+/// or cost cap) so that only a runaway table ever reaches them.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
 pub struct Lease {
-    /// Wall-clock budget for the whole table, seconds. Default 1800.
+    /// Wall-clock cap for the whole table, seconds. Default 7200.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wall_secs: Option<u64>,
-    /// Maximum rallies (player turns). Default 5.
+    /// Maximum rallies (player turns). Default 10.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_rallies: Option<u32>,
     /// Token budget (input + output), when the player reports usage.
@@ -67,11 +71,90 @@ impl Lease {
         }
     }
     pub fn wall(&self) -> u64 {
-        self.wall_secs.unwrap_or(1800)
+        self.wall_secs.unwrap_or(DEFAULT_WALL_SECS)
     }
     pub fn rallies(&self) -> u32 {
-        self.max_rallies.unwrap_or(5).max(1)
+        self.max_rallies.unwrap_or(DEFAULT_MAX_RALLIES).max(1)
     }
+}
+
+/// Default wall-clock guard per table (seconds).
+pub const DEFAULT_WALL_SECS: u64 = 7200;
+/// Default rally guard per table.
+pub const DEFAULT_MAX_RALLIES: u32 = 10;
+/// Default cap on nesting: a table at depth 0 may open sub-tables down to this depth.
+pub const DEFAULT_MAX_DEPTH: u32 = 3;
+
+/// Reasoning effort hint: one level for every rally, or a ladder (rally n uses entry
+/// n-1, the last entry repeats), e.g. `["low", "medium", "high"]`: a cheap first try,
+/// more thinking after the referee returned the ball.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(untagged)]
+pub enum Effort {
+    One(String),
+    Ladder(Vec<String>),
+}
+
+impl Effort {
+    pub fn for_rally(&self, n: u32) -> Option<String> {
+        match self {
+            Effort::One(s) => Some(s.clone()),
+            Effort::Ladder(v) => v
+                .get((n.max(1) as usize - 1).min(v.len().saturating_sub(1)))
+                .cloned(),
+        }
+    }
+}
+
+/// `max_parallel`: a number, or `"auto"` (probe the OpenAI-compatible endpoints the
+/// tables use for their slot counts; see `probe`).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(untagged)]
+pub enum Parallel {
+    N(usize),
+    Word(String),
+}
+
+/// Give a table its own git worktree on its own branch (isolation for coding players).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+#[serde(deny_unknown_fields)]
+pub struct WorktreeSpec {
+    /// The repository (relative paths resolve against the match file). Default ".".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repo: Option<String>,
+    /// Commit-ish the worktree starts from. Default "HEAD".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<String>,
+    /// Branch name. Default `upp/<table>-<table id>`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub branch: Option<String>,
+    /// Where to put it. Default `<store dir>/worktrees/<table id>`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+}
+
+/// A persistent orchestrator: one long-lived player that answers every card of the
+/// run's tables as it arrives (accept, return with a correction, chain the next ball,
+/// open a new table, stop), never blocking on one table.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct OrchestratorSpec {
+    pub player: PlayerSpec,
+    /// Standing instructions added to its system brief.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instructions: Option<String>,
+    /// Most cards sent in one message when several are waiting. Default 8.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub batch: Option<usize>,
+    /// Start a fresh orchestrator session after this many cards (keeps its context small). Default 40.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refresh_every: Option<u32>,
+    /// Runaway guard: most tables it may open or chain. Default 50.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_new_tables: Option<u32>,
+    /// Working directory of the orchestrator player (default: the match file's directory).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
 }
 
 /// Options shared by the agent CLI players (claude, codex, gemini, opencode).
@@ -121,6 +204,9 @@ pub enum PlayerSpec {
         temperature: Option<f64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         max_tokens: Option<u32>,
+        /// `reasoning_effort` sent with every request (a table's `effort` overrides it per rally).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reasoning_effort: Option<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         timeout_secs: Option<u64>,
         /// Send `X-Halogen-Keep`/`X-Halogen-From` so a Halogen server forks the cached session.
@@ -285,6 +371,10 @@ pub struct ServerSpec {
     /// Extra standing instructions appended to every return message.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    /// Send the full ball and answer to the server too. Default false: the server gets the
+    /// card and the referee output, and fetches a transcript on demand.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transcript: Option<bool>,
 }
 
 /// Write the player's answer into a file before the referee runs. This lets a
@@ -338,13 +428,25 @@ pub struct TableSpec {
     /// and the point is recorded as unverified. Without it, a table needs at least one check.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub unverified: bool,
+    /// Ask the player for a result card (`<card>` tail block). Default true.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub card: Option<bool>,
+    /// Reasoning effort hint per rally (see `Effort`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<Effort>,
+    /// Run this table in its own git worktree.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worktree: Option<WorktreeSpec>,
+    /// Deepest nesting this table's sub-tables may reach (absolute depth). Default 3.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_depth: Option<u32>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
 pub struct Defaults {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub max_parallel: Option<usize>,
+    pub max_parallel: Option<Parallel>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -360,6 +462,14 @@ pub struct Defaults {
     /// Default for `unverified` (see TableSpec).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unverified: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub card: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<Effort>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worktree: Option<WorktreeSpec>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_depth: Option<u32>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
@@ -371,6 +481,9 @@ pub struct MatchFile {
     pub defaults: Defaults,
     #[serde(default, rename = "table", alias = "tables")]
     pub tables: Vec<TableSpec>,
+    /// A persistent orchestrator for this match's tables (they default to `server.mode = "external"`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub orchestrator: Option<OrchestratorSpec>,
 }
 
 impl MatchFile {
@@ -424,11 +537,32 @@ impl MatchFile {
             }
         };
         fix(&mut m.defaults.cwd);
+        let abs = |c: &mut Option<String>| {
+            if let Some(p) = c.as_ref().filter(|p| !Path::new(p).is_absolute()) {
+                *c = Some(base.join(p).to_string_lossy().into_owned());
+            }
+        };
+        if let Some(o) = &mut m.orchestrator {
+            if o.cwd.is_none() {
+                o.cwd = Some(".".into());
+            }
+            abs(&mut o.cwd);
+        }
+        if let Some(w) = &mut m.defaults.worktree {
+            if w.repo.is_none() {
+                w.repo = Some(".".into());
+            }
+            abs(&mut w.repo);
+            abs(&mut w.path);
+        }
         for t in &mut m.tables {
-            if let Some(c) = &t.cwd {
-                if !Path::new(c).is_absolute() {
-                    t.cwd = Some(base.join(c).to_string_lossy().into_owned());
+            abs(&mut t.cwd);
+            if let Some(w) = &mut t.worktree {
+                if w.repo.is_none() {
+                    w.repo = Some(".".into());
                 }
+                abs(&mut w.repo);
+                abs(&mut w.path);
             }
         }
         Ok(m)
@@ -438,6 +572,13 @@ impl MatchFile {
     pub fn resolve(&self) -> Result<Vec<TableSpec>, String> {
         if self.tables.is_empty() {
             return Err("no tables: add at least one [[table]]".into());
+        }
+        if let Some(Parallel::Word(w)) = &self.defaults.max_parallel {
+            if w != "auto" {
+                return Err(format!(
+                    "max_parallel must be a number or \"auto\" (got {w:?})"
+                ));
+            }
         }
         let d = &self.defaults;
         let mut out = Vec::new();
@@ -467,6 +608,24 @@ impl MatchFile {
             }
             if !t.unverified {
                 t.unverified = d.unverified.unwrap_or(false);
+            }
+            if t.card.is_none() {
+                t.card = d.card;
+            }
+            if t.effort.is_none() {
+                t.effort = d.effort.clone();
+            }
+            if t.worktree.is_none() {
+                t.worktree = d.worktree.clone();
+            }
+            if t.max_depth.is_none() {
+                t.max_depth = d.max_depth;
+            }
+            if t.server.is_none() && self.orchestrator.is_some() {
+                t.server = Some(ServerSpec {
+                    mode: ServerMode::External,
+                    ..Default::default()
+                });
             }
             let base = d.lease.clone().unwrap_or_default();
             t.lease = Some(t.lease.clone().unwrap_or_default().merged(&base));
@@ -599,6 +758,46 @@ args = ["--permission-mode", "acceptEdits"]
         assert_eq!(t[1].player.as_ref().unwrap().label(), "claude:sonnet");
         // b inherits the default referee? No: defaults.referee is empty, b has none.
         assert!(t[1].referee.is_empty());
+    }
+
+    #[test]
+    fn v02_fields_resolve() {
+        let m = MatchFile::parse(
+            r#"
+[defaults]
+max_parallel = "auto"
+effort = ["low", "high"]
+player = { kind = "openai", model = "m", reasoning_effort = "medium" }
+referee = [{ kind = "command", run = "true" }]
+[orchestrator]
+player = { kind = "shell", command = "cat" }
+[[table]]
+name = "a"
+ball = "x"
+card = false
+worktree = { repo = "/r", base = "main" }
+[[table]]
+name = "b"
+ball = "y"
+server = { mode = "auto" }
+"#,
+        )
+        .unwrap();
+        let t = m.resolve().unwrap();
+        assert_eq!(t[0].server.as_ref().unwrap().mode, ServerMode::External);
+        assert_eq!(t[1].server.as_ref().unwrap().mode, ServerMode::Auto);
+        let e = t[0].effort.as_ref().unwrap();
+        assert_eq!(e.for_rally(1).as_deref(), Some("low"));
+        assert_eq!(e.for_rally(5).as_deref(), Some("high"));
+        assert_eq!(t[0].card, Some(false));
+        assert_eq!(
+            t[0].worktree.as_ref().unwrap().base.as_deref(),
+            Some("main")
+        );
+        assert_eq!(Lease::default().wall(), DEFAULT_WALL_SECS);
+        assert_eq!(Lease::default().rallies(), DEFAULT_MAX_RALLIES);
+        let bad = MatchFile::parse("[defaults]\nmax_parallel = \"lots\"\n[[table]]\nname=\"a\"\nball=\"b\"\nunverified=true\nplayer={kind=\"shell\",command=\"cat\"}\n").unwrap();
+        assert!(bad.resolve().unwrap_err().contains("auto"));
     }
 
     #[test]

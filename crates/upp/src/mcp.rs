@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Model Context Protocol server over stdio (newline-delimited JSON-RPC).
 //!
-//! Tools: table_create, table_status, table_list, ball_answer, table_stop, table_wait.
+//! Tools: table_create, table_status, table_list, ball_answer, table_stop, table_wait,
+//! cards_wait, card_answer, transcript, integrate.
 //! An agent (Claude Code, Codex, Gemini CLI, opencode, OpenUnum) uses them to open
-//! tables for workers and, with `server.mode = "external"`, to act as the server
-//! itself: it reads each pending ball and answers it with ball_answer.
+//! tables for workers and, with `server.mode = "external"`, to be the persistent
+//! orchestrator itself: `cards_wait` blocks until any table's result card needs an
+//! answer, `card_answer` answers it (accept / return / stop, chain `next`, `open`),
+//! `transcript` fetches a rally's full text only when a card is not enough.
+//! A player opens sub-tables with `table_create` and `parent` = its `UPP_TABLE`.
 
 use serde_json::{json, Value};
 use std::io::{BufRead, Write};
@@ -24,8 +28,64 @@ fn tools() -> Value {
                 "type": "object",
                 "properties": {
                     "match": {"description": "Match: JSON object or TOML/JSON text. Single-table shorthand: {name, goal, ball, cwd, player:{kind,...}, referee:[{kind,...}], lease:{wall_secs,max_rallies,max_tokens,max_cost_usd}, server:{mode}}."},
-                    "file": {"type": "string", "description": "Path to a .toml/.json match file (relative cwd values resolve against its directory)."}
+                    "file": {"type": "string", "description": "Path to a .toml/.json match file (relative cwd values resolve against its directory)."},
+                    "parent": {"type": "string", "description": "Open the tables as sub-tables of this running table (a player passes its own UPP_TABLE). They inherit its player and working directory; the parent's rally waits for them before its referee runs. Depth is capped (max_depth, default 3)."}
                 }
+            }
+        },
+        {
+            "name": "cards_wait",
+            "description": "The orchestrator's inbox. Blocks until a result card arrives and returns compact cards (done claim, summary, evidence, open issues, artifacts, tokens, elapsed, referee pass/fail with an output tail, provenance), never transcripts. Without `since`: returns at once with every card that needs your answer now (needs_answer: true), else waits for the next card. With `since` (the `cursor` you got): returns every newer card, including final cards of ended tables. Answer needs_answer cards with card_answer; fetch details with transcript only when the card is not enough.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "tables": {"type": "array", "items": {"type": "string"}, "description": "Table ids or names (default: all)."},
+                    "run": {"type": "string", "description": "Only this run."},
+                    "since": {"type": "integer", "description": "Card cursor from the previous call."},
+                    "timeout_secs": {"type": "integer", "description": "Default 60, max 600."}
+                }
+            },
+            "annotations": {"readOnlyHint": true}
+        },
+        {
+            "name": "card_answer",
+            "description": "Answer a card that needs your answer. verdict: accept (scores only if the referee passed), return (the note goes back to the player with the referee output: write a precise correction), stop. Optional `next`: the next ball, chained after this table's point (a new table that starts when this one scores, with its result as {{prev.answer}}). Optional `open`: a new table object ({name, ball, goal, referee, ...}; player and cwd default to this table's) in the same run.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "table": {"type": "string"},
+                    "verdict": {"type": "string", "enum": ["accept", "return", "stop"]},
+                    "note": {"type": "string"},
+                    "next": {"type": "string"},
+                    "open": {"type": "object"}
+                },
+                "required": ["table", "verdict"]
+            }
+        },
+        {
+            "name": "transcript",
+            "description": "The full ball, answer, referee output and provenance of one rally (or every rally) of a table. Use it only when a card is not enough: it is the expensive read.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "table": {"type": "string"},
+                    "rally": {"type": "integer"}
+                },
+                "required": ["table"]
+            },
+            "annotations": {"readOnlyHint": true}
+        },
+        {
+            "name": "integrate",
+            "description": "Merge the verified points of a run's worktree tables (worktree = {...}) into one new branch upp/integrate-<run>, in table order; each table contributes exactly the tree its referee passed. Stops at the first conflict. `check` runs a command on the result.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "run": {"type": "string"},
+                    "into": {"type": "string", "description": "Commit-ish to start from (default HEAD)."},
+                    "check": {"type": "string"}
+                },
+                "required": ["run"]
             }
         },
         {
@@ -95,6 +155,16 @@ fn call_tool(db: &Path, name: &str, a: &Value) -> Result<Value, String> {
     let s = |k: &str| a.get(k).and_then(|v| v.as_str()).map(String::from);
     let store = Store::open(db)?;
     match name {
+        "table_create" if s("parent").is_some() => {
+            let parent = s("parent").unwrap_or_default();
+            let m = match s("file") {
+                Some(f) => Value::String(
+                    std::fs::read_to_string(&f).map_err(|e| format!("cannot read {f}: {e}"))?,
+                ),
+                None => a.get("match").cloned().ok_or("give `match` or `file`")?,
+            };
+            api::create_child(&store, &parent, m)
+        }
         "table_create" => {
             if let Some(f) = s("file") {
                 let m = MatchFile::load(Path::new(&f))?;
@@ -140,6 +210,47 @@ fn call_tool(db: &Path, name: &str, a: &Value) -> Result<Value, String> {
                 .min(600);
             api::wait(db, &ids, Duration::from_secs(t))
         }
+        "cards_wait" => {
+            let q = api::CardQuery {
+                tables: a
+                    .get("tables")
+                    .and_then(|v| v.as_array())
+                    .map(|v| {
+                        v.iter()
+                            .filter_map(|x| x.as_str().map(String::from))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+                run: s("run"),
+                since: a.get("since").and_then(|v| v.as_i64()),
+                timeout: Duration::from_secs(
+                    a.get("timeout_secs")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(60)
+                        .min(600),
+                ),
+            };
+            api::cards_wait(db, &q)
+        }
+        "card_answer" => api::card_answer(
+            &store,
+            &s("table").ok_or("table is required")?,
+            &s("verdict").ok_or("verdict is required")?,
+            &s("note").unwrap_or_default(),
+            s("next").as_deref(),
+            a.get("open").filter(|o| o.is_object()),
+        ),
+        "transcript" => api::transcript(
+            &store,
+            &s("table").ok_or("table is required")?,
+            a.get("rally").and_then(|v| v.as_u64()).map(|n| n as u32),
+        ),
+        "integrate" => api::integrate(
+            &store,
+            &s("run").ok_or("run is required")?,
+            s("into").as_deref(),
+            s("check").as_deref(),
+        ),
         _ => Err(format!("unknown tool '{name}'")),
     }
 }

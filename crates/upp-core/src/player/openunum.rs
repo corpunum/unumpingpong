@@ -100,6 +100,9 @@ impl Player for OpenUnumPlayer {
             if v["pending"].as_bool() != Some(true) {
                 break;
             }
+            if ctx.cancelled() {
+                return Err("cancelled (table stopped)".into());
+            }
             if Instant::now() >= until {
                 return Err(format!(
                     "OpenUnum session {session} is still busy with turn {}",
@@ -148,6 +151,12 @@ impl Player for OpenUnumPlayer {
         let mut idle_polls = 0;
         while Instant::now() < until {
             std::thread::sleep(self.poll);
+            if ctx.cancelled() {
+                // Ask OpenUnum to stop the turn too (best effort).
+                let _ = with_pw(agent.post(&format!("{}/api/chat/cancel", self.base_url)))
+                    .send_json(json!({"sessionId": session}));
+                return Err(format!("turn {turn_id} cancelled (table stopped)"));
+            }
             let Some(v) = get_pending() else { continue };
             if v["pending"].as_bool() == Some(true) {
                 idle_polls = 0;
@@ -267,13 +276,13 @@ mod tests {
     }
 
     fn ctx() -> PlayCtx {
-        PlayCtx {
-            table_id: "t".into(),
-            rally: 1,
-            cwd: PathBuf::from("."),
-            deadline: Instant::now() + Duration::from_secs(5),
-            session_key: "t".into(),
-        }
+        PlayCtx::new(
+            "t",
+            1,
+            PathBuf::from("."),
+            Instant::now() + Duration::from_secs(5),
+            "t",
+        )
     }
 
     fn idle() -> Value {
