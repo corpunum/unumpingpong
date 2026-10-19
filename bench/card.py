@@ -12,31 +12,42 @@ r = json.load(open(os.path.join(H, "results.json")))
 F = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono"
 f = lambda s, b=False: ImageFont.truetype(F + ("-Bold" if b else "") + ".ttf", s)
 BG, FG, DIM, BAR = "#1e2030", "#e6e8f0", "#8b90a8", "#3a3f5c"
-COL = {"A": "#f5d76e", "B": "#6ee7a0", "C": "#7cc7ff"}
-NAME = {"A": "A one agent loop", "B": "B tables", "C": "C tables + orchestrator"}
+COL = {"A": "#f5d76e", "B": "#6ee7a0", "C": "#7cc7ff",
+       "haiku:A": "#ffb36b", "haiku:B": "#ff7a59", "luna-low:A": "#c9a7ff", "luna-low:B": "#a05cff"}
+NAME = {"A": "Qwen local: A one agent loop", "B": "Qwen local: B tables", "C": "Qwen local: C tables + orchestrator",
+        "haiku:A": "Haiku: A one session", "haiku:B": "Haiku: B tables",
+        "luna-low:A": "Luna low: A one session", "luna-low:B": "Luna low: B tables"}
 sets = [(k, v) for k, v in r["sets"].items() if any(a in v for a in "BC")]
+# Cloud players (Claude Code / Codex CLIs) join the same panels as extra series, keyed "player:arm".
+for _, v in sets:
+    for lab, arms in v.get("cloud", {}).items():
+        for arm, x in arms.items():
+            v[f"{lab}:{arm}"] = x
 W = 1200
 rows = [("verified tasks", lambda x: x["points"], lambda x: f"{x['points']}/{x['tasks']}"),
         ("verified / minute", lambda x: x["verified_per_min"], lambda x: f"{x['verified_per_min']:.2f}"),
         ("verified / 100k tokens", lambda x: x["verified_per_100k_tokens"], lambda x: f"{x['verified_per_100k_tokens']:.1f}"),
         ("wall time", lambda x: x["wall_s"], lambda x: f"{x['wall_s']:.0f} s"),
         ("tokens", lambda x: x["tokens"], lambda x: f"{x['tokens']:,}")]
-arms_of = lambda s: [a for a in "ABC" if a in s]
+ORDER = ["A", "B", "C", "haiku:A", "haiku:B", "luna-low:A", "luna-low:B"]
+arms_of = lambda s: [a for a in ORDER if a in s]
 bar_sets = [(k, v) for k, v in sets if len(arms_of(v)) >= 2]
 text_sets = [(k, v) for k, v in sets if len(arms_of(v)) < 2]
-Hh = 150 + sum(60 + len(rows) * (14 + 26 * len(arms_of(s))) for _, s in bar_sets) + 150 * len(text_sets) + 50
+Hh = 190 + sum(60 + len(rows) * (14 + 26 * len(arms_of(s))) for _, s in bar_sets) + 150 * len(text_sets) + 50
 im = Image.new("RGB", (W, Hh), BG); d = ImageDraw.Draw(im)
 d.text((40, 26), "UnumPingPong vs a single agent loop", font=f(30, True), fill=FG)
-d.text((40, 70), f"same local model ({r['model'].split('/')[-1]}), unit tests as the referee, one run per arm",
+d.text((40, 70), f"local Qwen (reference) vs Claude Haiku and Luna-low CLI players; unit tests as the referee, one run per arm",
        font=f(16), fill=DIM)
-x = 40
-for a in "ABC":
+x = 40; ly = 100
+for a in ORDER:
     if any(a in s for _, s in sets):
-        d.rectangle((x, 104, x + 14, 118), fill=COL[a]); d.text((x + 20, 100), NAME[a], font=f(15), fill=FG); x += 260
-y = 140
+        if x > 900:
+            x = 40; ly += 24
+        d.rectangle((x, ly + 4, x + 14, ly + 18), fill=COL[a]); d.text((x + 20, ly), NAME[a], font=f(14), fill=FG); x += 290
+y = ly + 40
 for name, s in bar_sets:
     arms = arms_of(s)
-    when = "; ".join(f"{a}: {s[a].get('date', '')}" for a in arms)
+    when = "runs " + ", ".join(sorted({s[a].get("date", "") for a in arms}))
     d.text((40, y), f"{name} set: {len(s['tasks'])} tasks", font=f(20, True), fill=FG)
     d.text((330, y + 4), when, font=f(13), fill=DIM); y += 40
     for label, val, txt in rows:
@@ -45,8 +56,13 @@ for name, s in bar_sets:
         for a in arms:
             v = val(s[a]) or 0
             d.rounded_rectangle((300, y, 1160, y + 22), 4, fill=BAR)
-            d.rounded_rectangle((300, y, 300 + max(6, int(860 * v / m)), y + 22), 4, fill=COL[a])
-            d.text((308, y + 2), txt(s[a]), font=f(15, True), fill="#101018")
+            bw = max(6, int(860 * v / m))
+            d.rounded_rectangle((300, y, 300 + bw, y + 22), 4, fill=COL[a])
+            t_ = txt(s[a])
+            if bw > 12 * len(t_) + 16:
+                d.text((308, y + 2), t_, font=f(15, True), fill="#101018")
+            else:
+                d.text((300 + bw + 8, y + 2), t_, font=f(15, True), fill=FG)
             y += 26
         y += 14
     y += 6

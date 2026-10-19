@@ -31,12 +31,14 @@ series. Scene 2 is a real run of `examples/three-functions.toml` against a local
 3x speed (88 s real time; recorded with v0.1). On a 6-task benchmark both a single agent loop
 and UnumPingPong verified 6/6 with unit-test referees; v0.2's tables used 7.3x fewer tokens
 (18.2k vs 132.6k: 33 vs 4.5 verified tasks per 100k tokens) but finished fewer tasks per minute
-(0.53 vs 1.02, on a busier shared endpoint). See [Benchmark](#benchmark).*
+(0.53 vs 1.02, on a busier shared endpoint). With cloud CLI players (Claude Haiku, Luna low) both
+arms verified every task and tables were slightly faster but used 1.3-2.8x *more* tokens than one
+session. See [Benchmark](#benchmark).*
 
 <details>
 <summary>Benchmark result card</summary>
 
-![benchmark card: easy set 6/6 vs 6/6, 33.0 vs 4.5 verified tasks per 100k tokens, 0.53 vs 1.02 per minute; hard set partial](docs/media/pingpong-result.png)
+![benchmark card: easy set 6/6 vs 6/6, 33.0 vs 4.5 verified tasks per 100k tokens, 0.53 vs 1.02 per minute; hard set partial; Claude Haiku and Luna-low cloud players added: 8/8 on the hard set in both arms](docs/media/pingpong-result.png)
 
 </details>
 
@@ -100,6 +102,36 @@ Findings, stated plainly:
   its place: in its own result cards the player claimed `done` 6 times and the referee rejected
   5 of them. 4 of 12 rallies spent the whole 6k-token budget, mostly reasoning, and truncated the
   code.
+
+### Cloud players (Claude Haiku, Luna low)
+
+The same sets with real agent CLIs as players, no local endpoint: Claude Code (`--model haiku`)
+and Codex (`-m gpt-5.6-luna`, reasoning effort low). A is one CLI session over all tasks (it
+edits, runs the tests itself, says DONE); B is one table per task, parallel 3, effort ladder,
+session resumed on a returned ball. One run per arm; tokens are what each CLI reports (input
+includes cache reads). Local Qwen stays the reference.
+
+| Set | Player | A: verified, wall, tokens | B tables: verified, wall, tokens |
+| --- | --- | --- | --- |
+| Easy (6) | Haiku | 6/6, 36 s, 101k, $0.009 | 6/6, 30 s, 145k, $0.008 |
+| Easy (6) | Luna low | 6/6, 33 s, 120k | 6/6, 34 s, 337k |
+| Hard (8) | Haiku | 8/8, 79 s, 255k, $0.019 | 8/8, 63 s, 407k, $0.046 |
+| Hard (8) | Luna low | 8/8, 53 s, 325k | 8/8, 47 s, 436k |
+
+- **Both cloud players verified every task in both arms; the sets do not separate the arms on
+  correctness for them**, and neither A run claimed DONE falsely. The local Qwen hard-set gap
+  (1/8) is a model-capability and token-budget result, not something tables fix.
+- **Tables lose on tokens and cost** with agent CLIs: every rally is a fresh invocation that
+  re-sends the CLI's system prompt and re-reads the stubs, so B used 1.3-2.8x the tokens of A
+  (verified per 100k tokens: Haiku hard 3.1 for A vs 2.0 for B; Luna easy 5.0 vs 1.8) and Haiku's
+  hard-set cost was 2.4x. Tables win modestly on wall time (parallel tables: 63 s vs 79 s, 47 s vs
+  53 s; a tie on Luna easy) and the referee returned a ball four times (Luna easy `calc`, Luna
+  hard `bankround`, Haiku hard `isoweek` and `jsonptr`), each fixed on the next rally in the same
+  resumed session. Where one strong session already tests itself and gets everything right, the
+  single loop is the cheaper arm; tables pay off with weaker or untrusted players, many
+  independent tasks, or when you need an independent verdict.
+- Cloud A is not comparable to the Qwen A (a full agent with its own tool loop on much faster
+  hardware); read these as a second reference, not a speed-up claim.
 
 Full tables, the wall-time investigation, caveats and the reproduce command are in
 [bench/results.md](bench/results.md).

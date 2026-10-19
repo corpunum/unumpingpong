@@ -256,6 +256,245 @@
     },
     "block_cards_claiming_done": 6,
     "rallies_at_max_tokens": 0
+   },
+   "cloud": {
+    "haiku": {
+     "A": {
+      "arm": "A one agent session",
+      "points": 6,
+      "per_task": {
+       "calc": true,
+       "duration": true,
+       "intervals": true,
+       "lru": true,
+       "semver": true,
+       "wrap": true
+      },
+      "turns": 11,
+      "max_turns": null,
+      "shell_runs": null,
+      "wall_s": 35.9,
+      "prompt_tokens": 93266,
+      "completion_tokens": 8045,
+      "cached_prompt_tokens": 72835,
+      "tokens": 101311,
+      "cost_usd": 0.0088,
+      "declared_done": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "claimed_done_but_failed": false,
+      "failed_when_claimed_done": 0,
+      "final_message_tail": "gex for the format, then core comparison, then prerelease identifier comparison. While checking this I fixed a sign error in the release-vs-prerelease branch before running the tests.\n- **wrap**: greedy fill, with words longer than the width split into width-sized chunks as the spec describes.\n\nDONE",
+      "stderr_tail": "",
+      "verified_per_min": 10.028,
+      "verified_per_100k_tokens": 5.92,
+      "tasks": 6,
+      "player": "claude",
+      "cli_model": "haiku",
+      "effort": [],
+      "date": "2026-10-19",
+      "endpoint_at_start": {}
+     },
+     "B": {
+      "arm": "B UnumPingPong tables",
+      "points": 6,
+      "per_task": {
+       "calc": true,
+       "duration": true,
+       "intervals": true,
+       "lru": true,
+       "semver": true,
+       "wrap": true
+      },
+      "rallies": 6,
+      "faults": 0,
+      "wall_s": 29.5,
+      "effort": [
+       "low",
+       "medium",
+       "high"
+      ],
+      "parallel": "3",
+      "parallel_used": "3",
+      "prompt_tokens": 132793,
+      "completion_tokens": 12616,
+      "cost_usd": 0.0081,
+      "player_tokens": 145409,
+      "orchestrator_tokens": 0,
+      "tokens": 145409,
+      "cards_from_block": 6,
+      "rally_cards": 6,
+      "block_cards_claiming_done": 6,
+      "player_claimed_done_referee_failed": 0,
+      "rallies_at_max_tokens": 0,
+      "per_table": {
+       "intervals": {
+        "rallies": 1,
+        "completion_tokens": [
+         1092
+        ]
+       },
+       "duration": {
+        "rallies": 1,
+        "completion_tokens": [
+         1476
+        ]
+       },
+       "lru": {
+        "rallies": 1,
+        "completion_tokens": [
+         1380
+        ]
+       },
+       "calc": {
+        "rallies": 1,
+        "completion_tokens": [
+         3331
+        ]
+       },
+       "semver": {
+        "rallies": 1,
+        "completion_tokens": [
+         2831
+        ]
+       },
+       "wrap": {
+        "rallies": 1,
+        "completion_tokens": [
+         2506
+        ]
+       }
+      },
+      "upp_stderr_tail": "",
+      "verified_per_min": 12.203,
+      "verified_per_100k_tokens": 4.13,
+      "tasks": 6,
+      "player": "claude",
+      "cli_model": "haiku",
+      "date": "2026-10-19",
+      "endpoint_at_start": {}
+     }
+    },
+    "luna-low": {
+     "A": {
+      "arm": "A one agent session",
+      "points": 6,
+      "per_task": {
+       "calc": true,
+       "duration": true,
+       "intervals": true,
+       "lru": true,
+       "semver": true,
+       "wrap": true
+      },
+      "turns": null,
+      "max_turns": null,
+      "shell_runs": null,
+      "wall_s": 32.7,
+      "prompt_tokens": 116869,
+      "completion_tokens": 3618,
+      "cached_prompt_tokens": 105088,
+      "tokens": 120487,
+      "cost_usd": null,
+      "declared_done": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "claimed_done_but_failed": false,
+      "failed_when_claimed_done": 0,
+      "final_message_tail": "Implemented all six tasks and verified every test suite passes:\n\n- calc\n- duration\n- intervals\n- lru\n- semver\n- wrap\n\nDONE",
+      "stderr_tail": "",
+      "verified_per_min": 11.009,
+      "verified_per_100k_tokens": 4.98,
+      "tasks": 6,
+      "player": "codex",
+      "cli_model": "gpt-5.6-luna",
+      "effort": [
+       "low"
+      ],
+      "date": "2026-10-19",
+      "endpoint_at_start": {}
+     },
+     "B": {
+      "arm": "B UnumPingPong tables",
+      "points": 6,
+      "per_task": {
+       "calc": true,
+       "duration": true,
+       "intervals": true,
+       "lru": true,
+       "semver": true,
+       "wrap": true
+      },
+      "rallies": 7,
+      "faults": 0,
+      "wall_s": 34.4,
+      "effort": [
+       "low",
+       "medium",
+       "high"
+      ],
+      "parallel": "3",
+      "parallel_used": "3",
+      "prompt_tokens": 326967,
+      "completion_tokens": 10407,
+      "cost_usd": null,
+      "player_tokens": 337374,
+      "orchestrator_tokens": 0,
+      "tokens": 337374,
+      "cards_from_block": 7,
+      "rally_cards": 7,
+      "block_cards_claiming_done": 7,
+      "player_claimed_done_referee_failed": 1,
+      "rallies_at_max_tokens": 0,
+      "per_table": {
+       "intervals": {
+        "rallies": 1,
+        "completion_tokens": [
+         767
+        ]
+       },
+       "duration": {
+        "rallies": 1,
+        "completion_tokens": [
+         1231
+        ]
+       },
+       "calc": {
+        "rallies": 2,
+        "completion_tokens": [
+         1708,
+         2935
+        ]
+       },
+       "lru": {
+        "rallies": 1,
+        "completion_tokens": [
+         1387
+        ]
+       },
+       "semver": {
+        "rallies": 1,
+        "completion_tokens": [
+         1518
+        ]
+       },
+       "wrap": {
+        "rallies": 1,
+        "completion_tokens": [
+         861
+        ]
+       }
+      },
+      "upp_stderr_tail": "",
+      "verified_per_min": 10.465,
+      "verified_per_100k_tokens": 1.78,
+      "tasks": 6,
+      "player": "codex",
+      "cli_model": "gpt-5.6-luna",
+      "date": "2026-10-19",
+      "endpoint_at_start": {}
+     }
+    }
    }
   },
   "hard": {
@@ -345,8 +584,281 @@
     "block_cards_claiming_done": 6,
     "rallies_at_max_tokens": 4,
     "note": "Capped: the remaining tables were stopped at 25 min (model-time budget on a shared endpoint); 3 faults are those cancelled calls; 4 tables never started."
+   },
+   "cloud": {
+    "haiku": {
+     "A": {
+      "arm": "A one agent session",
+      "points": 8,
+      "per_task": {
+       "bankround": true,
+       "csvline": true,
+       "glob": true,
+       "isoweek": true,
+       "jsonptr": true,
+       "moneysplit": true,
+       "roman": true,
+       "topo": true
+      },
+      "turns": 23,
+      "max_turns": null,
+      "shell_runs": null,
+      "wall_s": 79.2,
+      "prompt_tokens": 236491,
+      "completion_tokens": 18301,
+      "cached_prompt_tokens": 197423,
+      "tokens": 254792,
+      "cost_usd": 0.0189,
+      "declared_done": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "claimed_done_but_failed": false,
+      "failed_when_claimed_done": 0,
+      "final_message_tail": "e and the `' \"a\"'` case.\n- **jsonptr**: all `~` escapes are validated before any lookup, so `/x~` raises ValueError even when `x` is missing. The test expects this.\n\nThe `ResourceWarning` lines in the glob and isoweek output come from the test files' own `open()` calls, not from the solutions.\n\nDONE",
+      "stderr_tail": "",
+      "verified_per_min": 6.061,
+      "verified_per_100k_tokens": 3.14,
+      "tasks": 8,
+      "player": "claude",
+      "cli_model": "haiku",
+      "effort": [],
+      "date": "2026-10-19",
+      "endpoint_at_start": {}
+     },
+     "B": {
+      "arm": "B UnumPingPong tables",
+      "points": 8,
+      "per_task": {
+       "bankround": true,
+       "csvline": true,
+       "glob": true,
+       "isoweek": true,
+       "jsonptr": true,
+       "moneysplit": true,
+       "roman": true,
+       "topo": true
+      },
+      "rallies": 10,
+      "faults": 0,
+      "wall_s": 63.3,
+      "effort": [
+       "low",
+       "medium",
+       "high"
+      ],
+      "parallel": "3",
+      "parallel_used": "3",
+      "prompt_tokens": 371448,
+      "completion_tokens": 35745,
+      "cost_usd": 0.0463,
+      "player_tokens": 407193,
+      "orchestrator_tokens": 0,
+      "tokens": 407193,
+      "cards_from_block": 10,
+      "rally_cards": 10,
+      "block_cards_claiming_done": 8,
+      "player_claimed_done_referee_failed": 1,
+      "rallies_at_max_tokens": 1,
+      "per_table": {
+       "bankround": {
+        "rallies": 1,
+        "completion_tokens": [
+         5234
+        ]
+       },
+       "csvline": {
+        "rallies": 1,
+        "completion_tokens": [
+         5008
+        ]
+       },
+       "glob": {
+        "rallies": 1,
+        "completion_tokens": [
+         8941
+        ]
+       },
+       "isoweek": {
+        "rallies": 2,
+        "completion_tokens": [
+         2344,
+         1304
+        ]
+       },
+       "moneysplit": {
+        "rallies": 1,
+        "completion_tokens": [
+         2428
+        ]
+       },
+       "jsonptr": {
+        "rallies": 2,
+        "completion_tokens": [
+         4757,
+         1882
+        ]
+       },
+       "roman": {
+        "rallies": 1,
+        "completion_tokens": [
+         2495
+        ]
+       },
+       "topo": {
+        "rallies": 1,
+        "completion_tokens": [
+         1352
+        ]
+       }
+      },
+      "upp_stderr_tail": "",
+      "verified_per_min": 7.583,
+      "verified_per_100k_tokens": 1.96,
+      "tasks": 8,
+      "player": "claude",
+      "cli_model": "haiku",
+      "date": "2026-10-19",
+      "endpoint_at_start": {}
+     }
+    },
+    "luna-low": {
+     "A": {
+      "arm": "A one agent session",
+      "points": 8,
+      "per_task": {
+       "bankround": true,
+       "csvline": true,
+       "glob": true,
+       "isoweek": true,
+       "jsonptr": true,
+       "moneysplit": true,
+       "roman": true,
+       "topo": true
+      },
+      "turns": null,
+      "max_turns": null,
+      "shell_runs": null,
+      "wall_s": 52.7,
+      "prompt_tokens": 318362,
+      "completion_tokens": 6676,
+      "cached_prompt_tokens": 296960,
+      "tokens": 325038,
+      "cost_usd": null,
+      "declared_done": true,
+      "exit_code": 0,
+      "timed_out": false,
+      "claimed_done_but_failed": false,
+      "failed_when_claimed_done": 0,
+      "final_message_tail": "Implemented all eight tasks and verified every test suite passes:\n\n- bankround\n- csvline\n- glob\n- isoweek\n- jsonptr\n- moneysplit\n- roman\n- topo\n\nDONE",
+      "stderr_tail": "2026-10-19T15:18:25.773716Z ERROR codex_core::tools::router: error=apply_patch verification failed: invalid hunk at line 2, Update file hunk for path '/tmp/claude-1000/-home-corpunum/c5420f20-e165-49ca-a922-eef7e915ee1b/scratchpad/workluna-low/hard/a/isoweek/solution.py' is empty\n",
+      "verified_per_min": 9.108,
+      "verified_per_100k_tokens": 2.46,
+      "tasks": 8,
+      "player": "codex",
+      "cli_model": "gpt-5.6-luna",
+      "effort": [
+       "low"
+      ],
+      "date": "2026-10-19",
+      "endpoint_at_start": {}
+     },
+     "B": {
+      "arm": "B UnumPingPong tables",
+      "points": 8,
+      "per_task": {
+       "bankround": true,
+       "csvline": true,
+       "glob": true,
+       "isoweek": true,
+       "jsonptr": true,
+       "moneysplit": true,
+       "roman": true,
+       "topo": true
+      },
+      "rallies": 9,
+      "faults": 0,
+      "wall_s": 46.8,
+      "effort": [
+       "low",
+       "medium",
+       "high"
+      ],
+      "parallel": "3",
+      "parallel_used": "3",
+      "prompt_tokens": 421380,
+      "completion_tokens": 14630,
+      "cost_usd": null,
+      "player_tokens": 436010,
+      "orchestrator_tokens": 0,
+      "tokens": 436010,
+      "cards_from_block": 9,
+      "rally_cards": 9,
+      "block_cards_claiming_done": 9,
+      "player_claimed_done_referee_failed": 1,
+      "rallies_at_max_tokens": 0,
+      "per_table": {
+       "bankround": {
+        "rallies": 2,
+        "completion_tokens": [
+         862,
+         1462
+        ]
+       },
+       "csvline": {
+        "rallies": 1,
+        "completion_tokens": [
+         1704
+        ]
+       },
+       "glob": {
+        "rallies": 1,
+        "completion_tokens": [
+         2952
+        ]
+       },
+       "jsonptr": {
+        "rallies": 1,
+        "completion_tokens": [
+         1178
+        ]
+       },
+       "moneysplit": {
+        "rallies": 1,
+        "completion_tokens": [
+         1080
+        ]
+       },
+       "isoweek": {
+        "rallies": 1,
+        "completion_tokens": [
+         2536
+        ]
+       },
+       "roman": {
+        "rallies": 1,
+        "completion_tokens": [
+         1904
+        ]
+       },
+       "topo": {
+        "rallies": 1,
+        "completion_tokens": [
+         952
+        ]
+       }
+      },
+      "upp_stderr_tail": "",
+      "verified_per_min": 10.256,
+      "verified_per_100k_tokens": 1.83,
+      "tasks": 8,
+      "player": "codex",
+      "cli_model": "gpt-5.6-luna",
+      "date": "2026-10-19",
+      "endpoint_at_start": {}
+     }
+    }
    }
   }
  },
- "notes_md": "## Why B was slower in v0.1 (580 s vs 354 s), and what changed\n\nMeasured on the endpoint (one model, Halogen 0.17.5, 3 admission slots), 2026-10-19:\n\n| Probe | Result |\n| --- | --- |\n| 1 stream, `reasoning_effort = none`, 400-token list | 48.4 tok/s |\n| 3 concurrent streams, same request | 55.7 tok/s in total (18.6 each): **1.15x**, not 3x |\n| v0.1 B, completion tokens per ball (6 balls, server default effort `xhigh`) | 1.5k-5.8k; 4 of 6 balls ran to 5.3-5.8k of the 6k budget |\n| v0.1 A, completion tokens | 14.5k in total: one long think (5.6k) in turn 1 covered all six tasks |\n| Per-rally engine overhead (referee run, store writes, scheduling) | under 1 s per rally, against 100-500 s model calls |\n\nSo the gap was **not** the parallel cap and not per-rally overhead. The endpoint's three slots\nare admission, not throughput: three streams decode about as fast as one in total. Wall time is\ntherefore about *total completion tokens / the endpoint's aggregate decode rate*, and v0.1's\nfresh-context balls each did a long `xhigh` think (25.4k completion tokens against A's 14.5k).\n\nChanges in v0.2:\n\n- **Effort hints per rally** (`effort = [\"low\", \"medium\", \"high\"]`): a cheap first try, more\n  thinking only after the referee returned the ball. On the easy set this cut B's completion\n  tokens from 25.4k to 14.3k (-44%) at the same 6/6.\n- **`--parallel auto`** probes the slot count (3 here), and now also leaves the requests the\n  endpoint is already serving to that traffic (it did not in the run below: B took all 3 slots\n  while the owner's own traffic was running, which queued their requests).\n- No change can make three streams faster than the endpoint's aggregate decode rate; on this\n  endpoint parallel tables mainly help when players are slow tools (CLIs, tests), not decode.\n\n## Caveats (read before quoting numbers)\n\n- **Shared, loaded endpoint.** The v0.2 runs (easy B, hard B) ran while 2-3 other streams were\n  in flight on the same endpoint (`in_flight` 2-3, sometimes 3 queued), so their wall times are\n  much longer than the v0.1 runs (which had a quieter endpoint) and are **not comparable** to\n  them. Token counts and verified tasks per token are comparable; wall times only within a run.\n- **Model-time budget.** The whole v0.2 benchmark was capped at about 40 minutes of model time\n  on a shared endpoint. Easy A was not re-run (the v0.1 measurement is shown). Hard B was stopped\n  after 25 minutes with 1 of 8 verified (4 tables never started), and **hard A was not run**, so\n  there is no A vs B comparison on the hard set yet. Arm C (tables + a persistent orchestrator\n  on the same model) is implemented and tested with scripted players, but was not run live for\n  the same reason.\n- **What the hard set already shows.** The referee matters there: in the player's own result\n  cards it claimed `done: yes` 6 times and the referee rejected 5 of those (syntax errors from\n  answers cut off at the token budget, a carry bug in banker's rounding, glob set edge cases, an\n  ISO-week boundary). In 4 of 12 rallies the model used the entire 6,000-token budget, mostly on\n  reasoning, even at `low` effort on rally 1, so the code was truncated: this hard set needs a\n  larger `max_tokens` (or `effort = \"none\"` first) on this model.\n- One run per arm, temperature 0.2. Treat everything as indicative.\n- Reproduce: `cargo build --release`, then\n  `python3 bench/bench.py --base-url URL --model NAME --set easy|hard --arm a,b,c`\n  (results merge into bench/results.json), and `python3 bench/card.py` for the result card."
+ "notes_md": "## Why B was slower in v0.1 (580 s vs 354 s), and what changed\n\nMeasured on the endpoint (one model, Halogen 0.17.5, 3 admission slots), 2026-10-19:\n\n| Probe | Result |\n| --- | --- |\n| 1 stream, `reasoning_effort = none`, 400-token list | 48.4 tok/s |\n| 3 concurrent streams, same request | 55.7 tok/s in total (18.6 each): **1.15x**, not 3x |\n| v0.1 B, completion tokens per ball (6 balls, server default effort `xhigh`) | 1.5k-5.8k; 4 of 6 balls ran to 5.3-5.8k of the 6k budget |\n| v0.1 A, completion tokens | 14.5k in total: one long think (5.6k) in turn 1 covered all six tasks |\n| Per-rally engine overhead (referee run, store writes, scheduling) | under 1 s per rally, against 100-500 s model calls |\n\nSo the gap was **not** the parallel cap and not per-rally overhead. The endpoint's three slots\nare admission, not throughput: three streams decode about as fast as one in total. Wall time is\ntherefore about *total completion tokens / the endpoint's aggregate decode rate*, and v0.1's\nfresh-context balls each did a long `xhigh` think (25.4k completion tokens against A's 14.5k).\n\nChanges in v0.2:\n\n- **Effort hints per rally** (`effort = [\"low\", \"medium\", \"high\"]`): a cheap first try, more\n  thinking only after the referee returned the ball. On the easy set this cut B's completion\n  tokens from 25.4k to 14.3k (-44%) at the same 6/6.\n- **`--parallel auto`** probes the slot count (3 here), and now also leaves the requests the\n  endpoint is already serving to that traffic (it did not in the run below: B took all 3 slots\n  while the owner's own traffic was running, which queued their requests).\n- No change can make three streams faster than the endpoint's aggregate decode rate; on this\n  endpoint parallel tables mainly help when players are slow tools (CLIs, tests), not decode.\n\n## Caveats (read before quoting numbers)\n\n- **Shared, loaded endpoint.** The v0.2 runs (easy B, hard B) ran while 2-3 other streams were\n  in flight on the same endpoint (`in_flight` 2-3, sometimes 3 queued), so their wall times are\n  much longer than the v0.1 runs (which had a quieter endpoint) and are **not comparable** to\n  them. Token counts and verified tasks per token are comparable; wall times only within a run.\n- **Model-time budget.** The whole v0.2 benchmark was capped at about 40 minutes of model time\n  on a shared endpoint. Easy A was not re-run (the v0.1 measurement is shown). Hard B was stopped\n  after 25 minutes with 1 of 8 verified (4 tables never started), and **hard A was not run**, so\n  there is no A vs B comparison on the hard set yet. Arm C (tables + a persistent orchestrator\n  on the same model) is implemented and tested with scripted players, but was not run live for\n  the same reason.\n- **What the hard set already shows.** The referee matters there: in the player's own result\n  cards it claimed `done: yes` 6 times and the referee rejected 5 of those (syntax errors from\n  answers cut off at the token budget, a carry bug in banker's rounding, glob set edge cases, an\n  ISO-week boundary). In 4 of 12 rallies the model used the entire 6,000-token budget, mostly on\n  reasoning, even at `low` effort on rally 1, so the code was truncated: this hard set needs a\n  larger `max_tokens` (or `effort = \"none\"` first) on this model.\n- One run per arm, temperature 0.2. Treat everything as indicative.\n- Reproduce: `cargo build --release`, then\n  `python3 bench/bench.py --base-url URL --model NAME --set easy|hard --arm a,b,c`\n  (results merge into bench/results.json), and `python3 bench/card.py` for the result card.\n\n## Cloud players (Claude Haiku, Luna low), 2026-10-19\n\nSame task sets, same unit-test referee, run through the real agent CLIs with no local endpoint:\nClaude Code 2.1.303 `--model haiku` (Haiku 5.5) and codex-cli 0.160.0 `-m gpt-5.6-luna\n-c model_reasoning_effort=\"low\"` (`gpt-5.6-luna` is what `~/.codex/config.toml` migrates\n`gpt-5.4-mini` to). Both ran with user settings, MCP servers and memory switched off, edits and\nshell allowed, in a scratch directory. One run per arm. Reproduce:\n\n    python3 bench/bench.py --player claude --label haiku --cli-model haiku --set easy|hard --arm a,b --parallel 3\n    python3 bench/bench.py --player codex --label luna-low --cli-model gpt-5.6-luna --cli-effort low \\\n        --effort low,medium,high --set easy|hard --arm a,b --parallel 3\n\n- **A** = one CLI session over all tasks: it edits files, runs the tests itself, and ends with DONE\n  or NOT DONE. **B** = one UnumPingPong table per task, parallel 3, per-rally effort ladder\n  low/medium/high (Luna via `-c model_reasoning_effort`, Haiku via `--effort`; the Claude\n  adapter did not forward effort before this change), session resumed on a returned ball.\n- **Tokens** are what each CLI reports, input including cache reads and cache writes (about 10-25k\n  tokens of system prompt and tools are re-sent on every call). Claude reports a dollar cost, Codex\n  reports none. The Qwen reference column counts only prompt and completion tokens of a bare chat\n  call, so token columns are comparable inside a player, not across providers.\n- **Both cloud players verified every task in both arms (6/6 and 8/8)**: these sets do not separate\n  the arms on correctness for them. Neither A run claimed DONE falsely. In B the referee still\n  returned the ball once for Luna on easy (`calc`), once for Luna on hard (`bankround`) and twice\n  for Haiku on hard (`isoweek`, `jsonptr`); Haiku easy had none. Each returned ball was fixed on\n  rally 2 in the same resumed session (session id identical across rallies,\n  checked in the store).\n- **Where tables lose here:** tokens and cost. Every rally is a fresh agent invocation that\n  re-sends the system prompt and re-reads the stubs: B used 1.3x (Luna hard) to 2.8x (Luna easy)\n  the tokens of A, so verified per 100k tokens is lower for B for both cloud players, and Haiku's\n  hard-set cost was $0.046 for B against $0.019 for A. With a strong agent that fixes tasks in one\n  pass and tests itself, the single session is the cheaper arm. **Where tables win:** wall time\n  (Haiku 63 s vs 79 s hard, 30 s vs 36 s easy; Luna 47 s vs 53 s hard; a tie on easy at about\n  33 s), plus a deterministic referee instead of the agent's own word.\n- A is not comparable to local Qwen's A: Haiku/Luna are full agents with their own tool loops and\n  run 10-20x faster than the local model, so wall columns reflect hardware and provider, not the\n  method. The Qwen reference column is unchanged.\n"
 }

@@ -34,6 +34,12 @@ ap.add_argument("--arm", default="a,b", help="comma list of a, b, c")
 ap.add_argument("--upp", default=os.path.join(HERE, "..", "target", "release", "upp"))
 ap.add_argument("--work", default="/tmp/upp-bench", help="scratch directory (recreated per arm)")
 ap.add_argument("--max-tokens", type=int, default=6000)
+ap.add_argument("--player", choices=["openai", "claude", "codex"], default="openai",
+                help="openai = the local endpoint (reference); claude / codex = the agent CLIs (cloud players)")
+ap.add_argument("--label", help="column name for a CLI player in results.json, e.g. haiku or luna-low")
+ap.add_argument("--cli-model", help="model passed to the CLI (claude: haiku; codex: gpt-5.6-luna)")
+ap.add_argument("--cli-effort", default="", help="codex model_reasoning_effort for arm A (B uses --effort)")
+ap.add_argument("--cli-timeout", type=int, default=2400, help="arm A: wall limit of the one agent session, seconds")
 ap.add_argument("--temperature", type=float, default=0.2)
 ap.add_argument("--a-max-turns", type=int, default=0, help="default: max(20, 3 x tasks)")
 ap.add_argument("--b-max-rallies", type=int, default=4)
@@ -149,6 +155,78 @@ def arm_a(root):
                      "failed_when_claimed_done": (len(TASKS) - pts) if declared else None, "log": log}, len(TASKS))
 
 
+# ---------------------------------------------------------------- arm A with an agent CLI
+CLI_A_PROMPT = """You are working in a directory with several task folders. Each folder has solution.py (a stub whose
+docstring is the specification) and test_solution.py. Make every task's tests pass by editing solution.py
+(do not edit the tests). Run `python3 -m unittest -q test_solution` inside a folder to check yourself.
+Work through ALL tasks: {tasks}.
+Finish your final message with a line that says exactly DONE if every task's tests pass, or NOT DONE: <why> otherwise."""
+
+
+def cli_isolation():
+    if a.player == "claude":
+        # No user settings / MCP servers / CLAUDE.md memory: the player sees only the task.
+        return ["--setting-sources", "", "--strict-mcp-config", "--dangerously-skip-permissions"]
+    return ["--dangerously-bypass-approvals-and-sandbox", "-c", "features.memories=false", "-c", "mcp_servers={}"]
+
+
+def arm_a_cli(root):
+    fresh(root)
+    prompt = CLI_A_PROMPT.format(tasks=", ".join(TASKS))
+    last = os.path.join(os.path.dirname(root), "last.txt")
+    if os.path.exists(last):
+        os.remove(last)
+    if a.player == "claude":
+        argv = ["claude", "-p", "--output-format", "json", "--model", a.cli_model, *cli_isolation()]
+    else:
+        argv = ["codex", "exec", "--json", "--skip-git-repo-check", "-o", last, "-m", a.cli_model, *cli_isolation()]
+        if a.cli_effort:
+            argv += ["-c", f'model_reasoning_effort="{a.cli_effort}"']
+        argv.append("-")
+    t0 = time.time()
+    try:
+        r = subprocess.run(argv, input=prompt, cwd=root, capture_output=True, text=True, timeout=a.cli_timeout)
+        timed_out = False
+    except subprocess.TimeoutExpired as e:
+        out = e.stdout.decode() if isinstance(e.stdout, bytes) else (e.stdout or "")
+        r = subprocess.CompletedProcess(argv, -9, out, "")
+        timed_out = True
+    wall = time.time() - t0
+    pin = pout = cached = 0; cost = 0.0; text = ""; turns = None
+    if a.player == "claude":
+        try:
+            j = json.loads(r.stdout)
+            u = j.get("usage", {})
+            pin = u.get("input_tokens", 0) + u.get("cache_creation_input_tokens", 0) + u.get("cache_read_input_tokens", 0)
+            cached = u.get("cache_read_input_tokens", 0)
+            pout = u.get("output_tokens", 0); cost = j.get("total_cost_usd", 0.0); text = j.get("result", ""); turns = j.get("num_turns")
+        except Exception:  # noqa: BLE001
+            pass
+    else:
+        for l in r.stdout.splitlines():
+            try:
+                v = json.loads(l)
+            except Exception:  # noqa: BLE001
+                continue
+            if v.get("type") == "turn.completed":
+                pin += v["usage"].get("input_tokens", 0); pout += v["usage"].get("output_tokens", 0)
+                cached += v["usage"].get("cached_input_tokens", 0)
+            if v.get("type") == "item.completed" and v["item"].get("type") == "agent_message":
+                text = v["item"].get("text", "")
+        if os.path.exists(last):
+            text = open(last).read() or text
+    ok = referee(root)
+    pts = sum(ok.values())
+    declared = bool(re.search(r"^\s*DONE\s*$", text, re.M)) and "NOT DONE" not in text
+    return headline({"arm": "A one agent session", "points": pts, "per_task": ok, "turns": turns, "max_turns": None,
+                     "shell_runs": None, "wall_s": round(wall, 1), "prompt_tokens": pin, "completion_tokens": pout,
+                     "cached_prompt_tokens": cached, "tokens": pin + pout, "cost_usd": round(cost, 4) if cost else None,
+                     "declared_done": declared, "exit_code": r.returncode, "timed_out": timed_out,
+                     "claimed_done_but_failed": declared and pts < len(TASKS),
+                     "failed_when_claimed_done": (len(TASKS) - pts) if declared else None,
+                     "final_message_tail": text[-300:], "stderr_tail": r.stderr[-300:]}, len(TASKS))
+
+
 # ---------------------------------------------------------------- arms B and C: UnumPingPong tables
 def upp_json(*args):
     r = subprocess.run([UPP, *args], capture_output=True, text=True)
@@ -158,8 +236,12 @@ def upp_json(*args):
 def arm_tables(root, with_orchestrator):
     fresh(root)
     effort = [e for e in a.effort.split(",") if e]
-    player = (f'{{ kind = "openai", base_url = "{a.base_url}", model = "{a.model}", '
-              f'temperature = {a.temperature}, max_tokens = {a.max_tokens} }}')
+    if a.player != "openai":
+        player = (f'{{ kind = "{a.player}", model = {json.dumps(a.cli_model)}, timeout_secs = 900, '
+                  f'args = {json.dumps(cli_isolation())} }}')
+    else:
+        player = (f'{{ kind = "openai", base_url = "{a.base_url}", model = "{a.model}", '
+                  f'temperature = {a.temperature}, max_tokens = {a.max_tokens} }}')
     toml = ['[defaults]', f'max_parallel = "{a.parallel}"' if a.parallel == "auto" else f'max_parallel = {a.parallel}',
             f'lease = {{ wall_secs = 1800, max_rallies = {a.b_max_rallies} }}',
             'apply = { write_file = "solution.py" }', f'player = {player}',
@@ -201,6 +283,7 @@ def arm_tables(root, with_orchestrator):
         "wall_s": round(wall, 1), "effort": effort, "parallel": a.parallel,
         "parallel_used": re.search(r"--parallel auto -> (\d+)", r.stderr).group(1) if "--parallel auto" in r.stderr else a.parallel,
         "prompt_tokens": sum(x.get("tokens_in", 0) for x in rows), "completion_tokens": sum(x.get("tokens_out", 0) for x in rows),
+        "cost_usd": round(sum(x.get("cost_usd", 0) or 0 for x in rows), 4) or None,
         "player_tokens": player_tokens, "orchestrator_tokens": orch_tokens, "tokens": player_tokens + orch_tokens,
         "cards_from_block": sum(1 for c in rally_cards if c.get("source") == "block"),
         "rally_cards": len(rally_cards),
@@ -222,7 +305,7 @@ def fmt_arm(r, key):
         "wall": lambda: f"{r['wall_s']:.0f} s",
         "tokens": lambda: f"{r['tokens']:,} ({r['prompt_tokens']:,} + {r['completion_tokens']:,})"
         + (f" + {r['orchestrator_tokens']:,} orch." if r.get("orchestrator_tokens") else ""),
-        "calls": lambda: (f"{r['turns']} turns ({r['shell_runs']} self-checks)" if "turns" in r
+        "calls": lambda: ((f"{r['turns']} turns" if r.get("turns") else "one session") + (f" ({r['shell_runs']} self-checks)" if r.get("shell_runs") is not None else "") if "turns" in r
                           else f"{r['rallies']} rallies" + (f" ({r['faults']} faults)" if r.get("faults") else "")),
         "false": lambda: ((f"{'yes' if r['claimed_done_but_failed'] else 'no'}: declared DONE with "
                            f"{r['failed_when_claimed_done']} of {r['tasks']} failing") if r.get("declared_done")
@@ -230,6 +313,7 @@ def fmt_arm(r, key):
                                 else (f"{r['player_claimed_done_referee_failed']} of {r['block_cards_claiming_done']} "
                                       "player cards claiming done (caught by the referee)")
                                 if "block_cards_claiming_done" in r else "n/a (no cards in v0.1)")),
+        "cost": lambda: (f"${r['cost_usd']:.3f}" if r.get("cost_usd") else "not reported by the CLI"),
         "split": lambda: (f"player {r['player_tokens']:,} / orchestrator {r['orchestrator_tokens']:,}" if "player_tokens" in r else "n/a"),
     }[key]()
 
@@ -267,6 +351,23 @@ def render(res, out):
         failed = {k: [t for t, v in r["per_task"].items() if not v] for k, r in arms}
         L.append("- Tasks not verified: " + "; ".join(f"{k}: {', '.join(v) or 'none'}" for k, v in failed.items()) + ".")
         L.append("")
+    CLOUD = {"haiku": "Claude Haiku (Claude Code CLI)", "luna-low": "Luna, low effort (Codex CLI)"}
+    crow = rows[:5] + [("Cost", "cost")] + rows[5:7]
+    for name, s in res.get("sets", {}).items():
+        cl = s.get("cloud")
+        if not cl:
+            continue
+        cols = [("Qwen A (local, reference)", s["A"]) for _ in [0] if "A" in s] + \
+               [("Qwen B v0.2 (local, reference)", s["B"]) for _ in [0] if "B" in s]
+        for lab, v in cl.items():
+            for arm in ("A", "B"):
+                if arm in v:
+                    cols.append((f"{CLOUD.get(lab, lab)}: " + ("A one session" if arm == "A" else "B tables"), v[arm]))
+        L += [f"## {name.capitalize()} set with cloud players", "",
+              "| Metric | " + " | ".join(c for c, _ in cols) + " |", "| --- |" + " --- |" * len(cols)]
+        for label, key in crow:
+            L.append(f"| {label} | " + " | ".join(fmt_arm(r, key) for _, r in cols) + " |")
+        L.append("")
     L += res.get("notes_md", "").splitlines()
     open(os.path.join(out, "results.md"), "w").write("\n".join(L).rstrip() + "\n")
     print("\n".join(L))
@@ -274,20 +375,31 @@ def render(res, out):
 
 if a.render:
     render(json.load(open(a.render)), a.out); sys.exit(0)
-if not a.model:
+if not a.model and a.player == "openai":
     ap.error("--model is required")
 
 path = os.path.join(a.out, "results.json")
 res = json.load(open(path)) if os.path.exists(path) else {}
-res.update({"model": a.model, "base_url": a.base_url, "temperature": a.temperature, "max_tokens": a.max_tokens})
+cli = a.player != "openai"
+if cli:
+    if not (a.label and a.cli_model):
+        ap.error("--player claude|codex needs --label and --cli-model")
+    a.model = a.model or a.cli_model
+else:
+    res.update({"model": a.model, "base_url": a.base_url, "temperature": a.temperature, "max_tokens": a.max_tokens})
 s = res.setdefault("sets", {}).setdefault(a.set, {})
 s["tasks"] = TASKS
 for arm in [x.strip() for x in a.arm.split(",") if x.strip()]:
-    st = endpoint_state()
-    work = os.path.join(a.work, a.set, arm)
-    r = arm_a(work) if arm == "a" else arm_tables(work, arm == "c")
+    st = {} if cli else endpoint_state()
+    work = os.path.join(a.work, a.label or "local", a.set, arm)
+    if cli:
+        r = arm_a_cli(work) if arm == "a" else arm_tables(work, False)
+        r["player"] = a.player; r["cli_model"] = a.cli_model
+        r["effort"] = r.get("effort") or ([a.cli_effort] if a.cli_effort else [])
+    else:
+        r = arm_a(work) if arm == "a" else arm_tables(work, arm == "c")
     r["date"] = time.strftime("%Y-%m-%d"); r["endpoint_at_start"] = st
-    s[arm.upper()] = r
-    print(arm.upper(), json.dumps({k: v for k, v in r.items() if k not in ("log", "per_table", "upp_stderr_tail")}), flush=True)
+    (s.setdefault("cloud", {}).setdefault(a.label, {}) if cli else s)[arm.upper()] = r
+    print(a.label or "local", arm.upper(), json.dumps({k: v for k, v in r.items() if k not in ("log", "per_table", "upp_stderr_tail")}), flush=True)
     json.dump(res, open(path, "w"), indent=1)
 render(res, a.out)

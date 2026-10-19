@@ -30,7 +30,7 @@ gemini, opencode), whatever it printed.
 
 **Status: flags verified** against codex-cli 0.160.0 (`codex exec --help`,
 `codex exec resume --help`); event names (`thread.started`, `turn.completed`, `item.completed`,
-`agent_message`) checked in the binary. Not run with a model while building v0.1.
+`agent_message`) checked in the binary. **Verified live** (2026-10-19, `-m gpt-5.6-luna`, `-c model_reasoning_effort="low"`): multi-rally benchmark runs resumed the thread (same thread id across rallies) and parsed `turn.completed` usage; Codex reports no cost. See `bench/results.md`.
 
 Caveat: `codex exec resume` accepts fewer options than `codex exec` (no `-s/--sandbox`, no
 `-C`). Pass sandbox settings as `-c sandbox_mode="..."`, which both accept, or

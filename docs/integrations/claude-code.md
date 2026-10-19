@@ -25,7 +25,7 @@ kills the `claude` process group at once.
 
 **Status: flags verified** against Claude Code 2.1.303 `--help` (`-p/--print`,
 `--output-format json`, `--resume`, `--model`, `--permission-mode`); the result parser is tested
-on the documented result object. No paid model turn was run while building v0.1.
+on the documented result object. **Verified live** (2026-10-19, Haiku 5.5 on a Max plan): multi-rally runs of the benchmark with `--model haiku` resumed the session (`--resume`, same session id across rallies), parsed usage and `total_cost_usd`, and the per-rally `effort` ladder is forwarded as `--effort low|medium|high` (added after that run: the adapter ignored `effort` for Claude before). See `bench/results.md`.
 
 Permissions: in `-p` mode Claude Code cannot ask you. Without an edit permission it answers but
 does not change files. Pick one: `--permission-mode acceptEdits`, `--allowedTools "Edit Bash(cargo test:*)"`,
