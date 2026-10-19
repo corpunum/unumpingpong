@@ -1,0 +1,17 @@
+# systemd user unit: runs queued UnumPingPong tables and serves the local API.
+# Install: cp uppd.service ~/.config/systemd/user/ && systemctl --user enable --now uppd
+# Players and referee commands run as your user, with this unit's environment:
+# add Environment= lines for API keys your players reference via api_key_env.
+[Unit]
+Description=UnumPingPong daemon (orchestrator <-> worker tables)
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/uppd --listen 127.0.0.1:7878 --db %h/.local/share/unumpingpong/upp.db --parallel 4
+Restart=on-failure
+RestartSec=10
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=default.target

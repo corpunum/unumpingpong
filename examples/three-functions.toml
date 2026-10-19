@@ -1,0 +1,46 @@
+# Example (b): three tables in parallel, each writing one small function that a
+# test verifies. Every table has its own fresh, small context and its own referee.
+#
+#   upp run examples/three-functions.toml --watch
+#
+# Point the player at your OpenAI-compatible endpoint (or set a different player per table).
+
+[defaults]
+max_parallel = 3
+lease = { wall_secs = 600, max_rallies = 4 }
+apply = { write_file = "src/lib.rs" }
+player = { kind = "openai", base_url = "http://127.0.0.1:8080/v1", model = "local-model", temperature = 0.2, max_tokens = 2048 }
+referee = [{ kind = "command", name = "cargo test", run = "cargo test --offline --quiet", timeout_secs = 300 }]
+
+[[table]]
+name = "fizzbuzz"
+cwd = "work/fizzbuzz"
+setup = "rm -rf src Cargo.toml && cp -R ../../fixtures/fns/fizzbuzz/. ."
+ball = """
+Implement the TODO in this file. Keep the tests module unchanged.
+```rust
+{{file:src/lib.rs}}
+```
+"""
+
+[[table]]
+name = "palindrome"
+cwd = "work/palindrome"
+setup = "rm -rf src Cargo.toml && cp -R ../../fixtures/fns/palindrome/. ."
+ball = """
+Implement the TODO in this file. Keep the tests module unchanged.
+```rust
+{{file:src/lib.rs}}
+```
+"""
+
+[[table]]
+name = "roman"
+cwd = "work/roman"
+setup = "rm -rf src Cargo.toml && cp -R ../../fixtures/fns/roman/. ."
+ball = """
+Implement the TODO in this file. Keep the tests module unchanged.
+```rust
+{{file:src/lib.rs}}
+```
+"""

@@ -1,0 +1,55 @@
+# Example (c): a serial chain. Each table's point becomes the next table's ball:
+#   plan -> implement -> test
+#
+#   upp run examples/plan-implement-test.toml --watch
+#
+# `plan` must answer with JSON (checked by json_path_equals), `implement` gets the plan
+# as {{prev.answer}} and must pass `cargo build`, `test` adds tests that must pass.
+# A table that ends without a point skips the rest of the chain.
+
+[defaults]
+lease = { wall_secs = 600, max_rallies = 4 }
+player = { kind = "openai", base_url = "http://127.0.0.1:8080/v1", model = "local-model", temperature = 0.2, max_tokens = 3072 }
+
+[[table]]
+name = "plan"
+cwd = "work/slug"
+setup = "rm -rf src tests Cargo.toml && cp -R ../../fixtures/slug/. ."
+goal = "A plan for a Rust `slugify` function."
+ball = """
+Plan a Rust function `pub fn slugify(s: &str) -> String` that turns a title into a URL slug
+(lowercase ASCII letters and digits, words joined by single '-', no leading/trailing '-').
+Answer with JSON only:
+{"function": "slugify", "rules": ["..."], "examples": [["input", "output"]]}
+"""
+referee = [
+  { kind = "json_path_equals", path = "function", equals = "slugify" },
+]
+
+[[table]]
+name = "implement"
+after = "plan"
+cwd = "work/slug"
+apply = { write_file = "src/lib.rs" }
+ball = """
+Implement this plan as the complete src/lib.rs of a Rust library crate (no tests yet):
+
+{{prev.answer}}
+"""
+referee = [{ kind = "command", name = "cargo build", run = "cargo build --offline --quiet", timeout_secs = 300 }]
+
+[[table]]
+name = "test"
+after = "implement"
+cwd = "work/slug"
+apply = { write_file = "tests/slugify.rs" }
+ball = """
+Write an integration test file tests/slugify.rs for the crate `slug` (use slug::slugify;)
+with at least 5 #[test] cases from this plan and implementation. The tests must pass.
+
+Implementation:
+```rust
+{{file:src/lib.rs}}
+```
+"""
+referee = [{ kind = "command", name = "cargo test", run = "cargo test --offline --quiet", timeout_secs = 300 }]

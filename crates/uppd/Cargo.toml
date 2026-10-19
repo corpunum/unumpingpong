@@ -1,0 +1,24 @@
+[package]
+name = "uppd"
+description = "UnumPingPong daemon: runs queued tables, local HTTP/JSON API with SSE events"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+readme = "../../README.md"
+
+[[bin]]
+name = "uppd"
+path = "src/main.rs"
+
+[dependencies]
+upp-core.workspace = true
+serde_json.workspace = true
+tiny_http.workspace = true
+lexopt.workspace = true
+
+[dev-dependencies]
+ureq.workspace = true
+tempfile.workspace = true

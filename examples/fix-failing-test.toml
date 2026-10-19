@@ -1,0 +1,43 @@
+# Example (a): fix a failing test. The referee is `cargo test`.
+#
+#   upp run examples/fix-failing-test.toml --watch
+#
+# The fixture crate (examples/fixtures/calc) has two bugs. `setup` copies it into
+# examples/work/calc; the player answers with the fixed src/lib.rs, `apply` writes it,
+# and the referee runs the tests. A failing run goes back with the test output.
+#
+# Default player: any OpenAI-compatible endpoint on localhost (llama.cpp, Halogen,
+# vLLM, Ollama with /v1, LM Studio). Change base_url/model, or swap in an agent CLI
+# that edits files itself (then drop `apply`), e.g.:
+#   player = { kind = "claude", args = ["--permission-mode", "acceptEdits"] }
+#   player = { kind = "codex", args = ["--dangerously-bypass-approvals-and-sandbox"] }
+#   player = { kind = "opencode", args = ["--auto"] }
+
+[[table]]
+name = "fix-calc"
+goal = "Make `cargo test` pass in the calc crate without changing the tests."
+cwd = "work/calc"
+setup = "rm -rf src Cargo.toml && cp -R ../../fixtures/calc/. ."
+apply = { write_file = "src/lib.rs" }
+ball = """
+The tests of this Rust crate fail. Fix the functions (not the tests).
+
+src/lib.rs:
+```rust
+{{file:src/lib.rs}}
+```
+"""
+lease = { wall_secs = 600, max_rallies = 4 }
+
+[table.player]
+kind = "openai"
+base_url = "http://127.0.0.1:8080/v1"
+model = "local-model"          # any model id your endpoint serves
+temperature = 0.2
+max_tokens = 4096
+
+[[table.referee]]
+name = "cargo test"
+kind = "command"
+run = "cargo test --offline --quiet"
+timeout_secs = 300

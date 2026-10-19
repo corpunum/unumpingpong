@@ -1,0 +1,12 @@
+# Model-free demo of an external server: you (or an agent over MCP) review every ball.
+#
+#   upp --db /tmp/upp-ext.db run examples/demo/external.toml --watch
+#   # in the TUI: select the table and press `a` (accept) or `r` (return);
+#   # or from another shell: upp --db /tmp/upp-ext.db answer review return "use 42"
+[[table]]
+name = "review"
+goal = "answer.txt holds 42"
+ball = "Write the answer to work/review/answer.txt."
+player = { kind = "shell", command = ["sh", "../../tests/fake-agents/fake-coder.sh"], env = { FAKE_FILE = "work/review/answer.txt", FAKE_PASS_ON = "2", FAKE_SLEEP = "1" } }
+referee = [{ kind = "command", name = "is 42", run = "grep -qx 42 work/review/answer.txt" }]
+server = { mode = "external", timeout_secs = 600 }

@@ -1,0 +1,67 @@
+# Model-free demo for the live TUI (and the README video): scripted fake agents
+# that get the work right on a given rally, real referee commands, real store.
+#
+#   upp --db /tmp/upp-demo.db run examples/demo/demo.toml --watch --exit-when-done
+#
+# Five tables in parallel (cap 4, so one waits), plus a serial chain plan -> build -> ship.
+
+[defaults]
+max_parallel = 4
+lease = { wall_secs = 120, max_rallies = 4 }
+
+[[table]]
+name = "auth-bug"
+goal = "the login test passes"
+ball = "Fix the token expiry bug so tests/login passes."
+player = { kind = "shell", command = ["sh", "../../tests/fake-agents/fake-coder.sh"], env = { FAKE_FILE = "work/auth/answer.txt", FAKE_PASS_ON = "3", FAKE_SLEEP = "1.6" } }
+referee = [{ kind = "command", name = "login test", run = "grep -qx 42 work/auth/answer.txt || { echo 'FAILED tests/login.rs: expected token valid, got expired'; exit 1; }" }]
+
+[[table]]
+name = "parser"
+goal = "parse_date handles ISO weeks"
+ball = "Teach parse_date about ISO week dates (2026-W42-1)."
+player = { kind = "shell", command = ["sh", "../../tests/fake-agents/fake-coder.sh"], env = { FAKE_FILE = "work/parser/answer.txt", FAKE_PASS_ON = "2", FAKE_SLEEP = "2.2" } }
+referee = [{ kind = "command", name = "cargo test parser", run = "grep -qx 42 work/parser/answer.txt || { echo 'test parser::iso_week ... FAILED'; exit 101; }" }]
+
+[[table]]
+name = "docs"
+goal = "README has an install section"
+ball = "Add an Install section to the README."
+player = { kind = "shell", command = ["sh", "../../tests/fake-agents/fake-coder.sh"], env = { FAKE_FILE = "work/docs/README.md", FAKE_GOOD = "## Install", FAKE_PASS_ON = "1", FAKE_SLEEP = "2.8" } }
+referee = [{ kind = "file_exists", path = "work/docs/README.md", contains = "^## Install" }]
+
+[[table]]
+name = "flaky-net"
+goal = "retry on 503"
+ball = "Retry HTTP 503 responses with backoff."
+player = { kind = "shell", command = ["sh", "../../tests/fake-agents/fake-coder.sh"], env = { FAKE_FILE = "work/net/answer.txt", FAKE_FAIL_ON = "1", FAKE_PASS_ON = "2", FAKE_SLEEP = "1.2" } }
+referee = [{ kind = "command", name = "net test", run = "grep -qx 42 work/net/answer.txt" }]
+
+[[table]]
+name = "perf"
+goal = "p99 under 5 ms"
+ball = "Get the p99 latency of /search under 5 ms."
+lease = { max_rallies = 3 }
+player = { kind = "shell", command = ["sh", "../../tests/fake-agents/fake-coder.sh"], env = { FAKE_FILE = "work/perf/answer.txt", FAKE_PASS_ON = "9", FAKE_SLEEP = "1.9" } }
+referee = [{ kind = "command", name = "bench p99", run = "grep -qx 42 work/perf/answer.txt || { echo 'p99 = 7.9 ms (limit 5 ms)'; exit 1; }" }]
+
+[[table]]
+name = "plan"
+goal = "a plan with 3 steps"
+ball = "Plan the v2 export feature in 3 steps."
+player = { kind = "shell", command = ["sh", "../../tests/fake-agents/fake-coder.sh"], env = { FAKE_FILE = "work/chain/plan.txt", FAKE_PASS_ON = "1", FAKE_SLEEP = "1.5" } }
+referee = [{ kind = "file_exists", path = "work/chain/plan.txt" }]
+
+[[table]]
+name = "build"
+after = "plan"
+ball = "Build it. Plan from the previous table:\n{{prev.answer}}"
+player = { kind = "shell", command = ["sh", "../../tests/fake-agents/fake-coder.sh"], env = { FAKE_FILE = "work/chain/build.txt", FAKE_PASS_ON = "2", FAKE_SLEEP = "1.5" } }
+referee = [{ kind = "command", name = "cargo build", run = "grep -qx 42 work/chain/build.txt || { echo 'error[E0308]: mismatched types'; exit 101; }" }]
+
+[[table]]
+name = "ship"
+after = "build"
+ball = "Ship it: {{prev.answer}}"
+player = { kind = "shell", command = ["sh", "../../tests/fake-agents/fake-coder.sh"], env = { FAKE_FILE = "work/chain/ship.txt", FAKE_PASS_ON = "1", FAKE_SLEEP = "1.2" } }
+referee = [{ kind = "file_exists", path = "work/chain/ship.txt" }]
