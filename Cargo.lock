@@ -1264,6 +1264,7 @@ dependencies = [
  "tiny_http",
  "upp-core",
  "ureq",
+ "uuid",
 ]
 
 [[package]]

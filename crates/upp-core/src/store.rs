@@ -574,6 +574,20 @@ impl Store {
 
     /// Atomically claim up to `limit` ready tables (queued, upstream scored). `run` filters by run id.
     pub fn claim(&self, owner: &str, limit: usize, run: Option<&str>) -> R<Vec<TableRow>> {
+        self.claim_capped(owner, limit, run, None)
+    }
+
+    /// `claim`, with an optional machine-wide cap: never more than `global` tables running
+    /// at once across every process sharing this store (tables waiting on their own
+    /// sub-tables do not count). Each claim is one UPDATE, so the check and the claim are
+    /// atomic between processes.
+    pub fn claim_capped(
+        &self,
+        owner: &str,
+        limit: usize,
+        run: Option<&str>,
+        global: Option<usize>,
+    ) -> R<Vec<TableRow>> {
         if limit == 0 {
             return Ok(vec![]);
         }
@@ -597,8 +611,10 @@ impl Store {
                 .conn
                 .execute(
                     "UPDATE tables SET status='running', phase='idle', owner=?1, \
-                     started_ms=COALESCE(started_ms, ?2) WHERE id=?3 AND status='queued'",
-                    params![owner, now_ms(), id],
+                     started_ms=COALESCE(started_ms, ?2) WHERE id=?3 AND status='queued' \
+                     AND (?4 IS NULL OR (SELECT COUNT(*) FROM tables WHERE status IN \
+                     ('running','awaiting_server') AND phase != 'children') < ?4)",
+                    params![owner, now_ms(), id, global.map(|g| g as i64)],
                 )
                 .map_err(e)?;
             if n == 1 {
@@ -1284,6 +1300,32 @@ ball = "z"
         assert!(s.events_since(0, 100).unwrap().len() >= 5);
         assert_eq!(s.spec(&ids[1]).unwrap().after.as_deref(), Some("a"));
         let _ = Cmd::Line("x".into());
+    }
+
+    #[test]
+    fn the_global_cap_holds_across_owners() {
+        let d = tempfile::tempdir().unwrap();
+        let s = Store::open(&d.path().join("upp.db")).unwrap();
+        let m = MatchFile::from_json(serde_json::json!({"table": [
+            {"name": "a", "ball": "x", "player": {"kind": "shell", "command": "cat"}, "referee": [{"kind": "command", "run": "true"}]},
+            {"name": "b", "ball": "x", "player": {"kind": "shell", "command": "cat"}, "referee": [{"kind": "command", "run": "true"}]},
+            {"name": "c", "ball": "x", "player": {"kind": "shell", "command": "cat"}, "referee": [{"kind": "command", "run": "true"}]}
+        ]}))
+        .unwrap();
+        let (run, _) = s
+            .create_run(Some("g"), None, &m.resolve().unwrap())
+            .unwrap();
+        // Two schedulers (different owners, e.g. two processes) share a cap of 2.
+        assert_eq!(
+            s.claim_capped("p1", 10, Some(&run), Some(2)).unwrap().len(),
+            2
+        );
+        assert!(s
+            .claim_capped("p2", 10, Some(&run), Some(2))
+            .unwrap()
+            .is_empty());
+        // Without a cap the third table is free to run.
+        assert_eq!(s.claim("p2", 10, Some(&run)).unwrap().len(), 1);
     }
 
     #[test]
