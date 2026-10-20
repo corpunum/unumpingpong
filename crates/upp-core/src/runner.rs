@@ -405,6 +405,26 @@ fn build_card(
     })
 }
 
+/// Files that differ between the snapshot `tree` and the working tree now (untracked
+/// files included). Empty outside git or when nothing changed.
+fn changed_since(cwd: &Path, tree: Option<&str>) -> Vec<String> {
+    let Some(tree) = tree else { return vec![] };
+    let now = git::provenance(cwd, None, true);
+    let (Some(repo), Some(cur)) = (now["repo"].as_str(), now["tree"].as_str()) else {
+        return vec![];
+    };
+    if cur == tree {
+        return vec![];
+    }
+    git::git(
+        Path::new(repo),
+        &["diff", "--name-only", tree, cur],
+        &Default::default(),
+    )
+    .map(|s| s.lines().map(String::from).collect())
+    .unwrap_or_default()
+}
+
 /// Referee output kept on a card (the orchestrator's view; the full output is in the transcript).
 pub const REFEREE_TAIL: usize = 800;
 
@@ -413,7 +433,14 @@ fn run_inner(store: &Store, id: &str) -> Result<String, String> {
     let row = store.table(id)?.ok_or("table vanished")?;
     let lease = spec.lease.clone().unwrap_or_default();
     let start = Instant::now();
-    let deadline = start + Duration::from_secs(lease.wall());
+    // The wall lease covers the whole table, across crashes and resumes: time used by
+    // earlier runs is spent.
+    let used_before = store.wall_used_ms(id)?;
+    let deadline = start
+        + Duration::from_secs(lease.wall()).saturating_sub(Duration::from_millis(used_before));
+    let save_wall = |store: &Store| {
+        store.set_wall_used_ms(id, used_before + start.elapsed().as_millis() as u64)
+    };
     let db = std::path::absolute(store.path()).unwrap_or_else(|_| store.path().to_path_buf());
     let prior = store.rallies(id)?;
     let resuming = !prior.is_empty() || row.resumes > 0;
@@ -563,6 +590,29 @@ fn run_inner(store: &Store, id: &str) -> Result<String, String> {
     } else if resuming {
         store.event(id, "resumed", json!({"after_rally": 0}))?;
     }
+    // A rally the player started but never recorded (the scheduler died mid-rally): the
+    // player may already have changed files. Never replay it blind: say so, with what
+    // changed since it started, and continue from the current state.
+    if let Some(f) = store.inflight(id)? {
+        if f["n"].as_u64() == Some(first as u64) {
+            let changed = changed_since(&cwd, f["tree"].as_str());
+            if !changed.is_empty() {
+                msg = format!(
+                    "Recovery: your previous attempt at this rally was interrupted after you \
+                     started (the scheduler stopped). It may already have changed files. \
+                     Changed since it started: {}. Continue from the current state; do not \
+                     redo work that is already done.\n\n{msg}",
+                    changed.join(", ")
+                );
+            }
+            store.event(
+                id,
+                "recovered_inflight",
+                json!({"n": first, "changed_since_start": changed}),
+            )?;
+        }
+        store.set_inflight(id, None)?;
+    }
     let mut seen_children: Vec<String> = store.children(id)?.into_iter().map(|t| t.id).collect();
     let mut last_mode = String::new();
     for n in first..=lease.rallies() {
@@ -621,7 +671,11 @@ fn run_inner(store: &Store, id: &str) -> Result<String, String> {
         } else {
             Some(brief.as_str())
         };
+        let snap = git::provenance(&cwd, None, true);
+        store.set_inflight(id, Some(&json!({"n": n, "tree": snap["tree"]})))?;
         let played = player.play(&msg, &ctx);
+        store.set_inflight(id, None)?;
+        save_wall(store)?;
         let mode = player.mode();
         if !mode.is_empty() && mode != last_mode {
             store.event(id, "player_mode", json!({"n": n, "mode": mode}))?;

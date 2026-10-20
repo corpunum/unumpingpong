@@ -444,6 +444,27 @@ referee = [{{ kind = "command", run = "grep -qx 42 answer.txt" }}]
             fake("fake-coder.sh")
         ),
     );
+    for args in [
+        &["init", "-q"][..],
+        &["add", "-A"],
+        &[
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@t",
+            "commit",
+            "-q",
+            "-m",
+            "base",
+        ],
+    ] {
+        let o = std::process::Command::new("git")
+            .args(args)
+            .current_dir(d.path())
+            .output()
+            .unwrap();
+        assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    }
     let mut run = upp()
         .arg("--db")
         .arg(&db)
@@ -460,6 +481,8 @@ referee = [{{ kind = "command", run = "grep -qx 42 answer.txt" }}]
         );
         std::thread::sleep(Duration::from_millis(50));
     }
+    // The interrupted player had already changed a file before the crash.
+    std::fs::write(d.path().join("partial.txt"), "half done\n").unwrap();
     run.kill().unwrap();
     run.wait().unwrap();
     let st = json_out(upp().arg("--db").arg(&db).args(["status", "crashy"]));
@@ -482,6 +505,12 @@ referee = [{{ kind = "command", run = "grep -qx 42 answer.txt" }}]
     let b2 = std::fs::read_to_string(d.path().join("log/ball-2.txt")).unwrap();
     assert!(
         b2.contains("Failed checks") && b2.contains("Original ball"),
+        "{b2}"
+    );
+    // Not a blind replay: rally 2 was in flight, so the player is told what changed since
+    // it started and to continue from there.
+    assert!(
+        b2.starts_with("Recovery:") && b2.contains("partial.txt"),
         "{b2}"
     );
 }
