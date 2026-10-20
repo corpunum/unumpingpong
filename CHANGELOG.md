@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased (v0.2.2)
+## v0.2.2 (2026-10-20) - Reliability hardening (review follow-up)
+
+An external review of v0.2.1 found four gaps (a fail-open orchestrator fallback, blind replay
+after a crash, shared child working directories, an unauthenticated daemon); all four were
+confirmed in the code and are fixed here. The OpenUnum player also ran live for the first
+time: 2/2 points on rally 1, in parallel.
 
 - **Orchestrator review policy (fail closed).** `[orchestrator] review = "referee"` (default,
   unchanged): a card with no valid decision falls back to the referee. `review = "required"`:
