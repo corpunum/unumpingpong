@@ -386,6 +386,7 @@ instructions = "Accept when the referee passed; otherwise one precise correction
 batch = 8              # cards per message when several wait
 refresh_every = 40     # fresh orchestrator session after N cards (its context stays small)
 max_new_tables = 50    # runaway guard on `next` / `open`
+review = "referee"     # default; "required" = no point without a valid decision (3 tries, then the table stops as needs_review)
 ```
 
 It sleeps until any table has a card waiting, sends every waiting card in one message, and
@@ -400,7 +401,9 @@ the tables it served: `orchestrator_tokens` next to `player_tokens`.
 - **Sub-tables.** A player's process gets `UPP_TABLE`, `UPP_RALLY`, `UPP_RUN`, `UPP_DEPTH` and
   `UPP_DB`. `upp create sub.toml --parent "$UPP_TABLE"` (MCP `table_create` with `parent`, HTTP
   `POST /api/tables?parent=ID`) opens sub-tables in the same run. They inherit the player and
-  the working directory and need their own referee. The parent's rally waits for them (without
+  the working directory and need their own referee. When the parent runs in a worktree, each
+  writer child gets its own worktree branched from the parent's branch; `read_only = true`
+  children share the parent's directory. The parent's rally waits for them (without
   holding a parallel slot) before its referee runs, and their final cards appear under
   `children` in the parent's card. Depth is capped by `max_depth` (default 3).
 - **Worktrees.** `worktree = { repo = "." }` (per table or in `[defaults]`) gives a table its

@@ -133,6 +133,14 @@ pub struct WorktreeSpec {
     pub path: Option<String>,
 }
 
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum OrchestratorReviewPolicy {
+    #[default]
+    Referee,
+    Required,
+}
+
 /// A persistent orchestrator: one long-lived player that answers every card of the
 /// run's tables as it arrives (accept, return with a correction, chain the next ball,
 /// open a new table, stop), never blocking on one table.
@@ -140,6 +148,9 @@ pub struct WorktreeSpec {
 #[serde(deny_unknown_fields)]
 pub struct OrchestratorSpec {
     pub player: PlayerSpec,
+    /// How invalid or missing decisions are handled: `referee` (safe fallback) or `required`.
+    #[serde(default)]
+    pub review: OrchestratorReviewPolicy,
     /// Standing instructions added to its system brief.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub instructions: Option<String>,
@@ -461,6 +472,9 @@ pub struct TableSpec {
     /// Run this table in its own git worktree.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub worktree: Option<WorktreeSpec>,
+    /// Whether this child only reads shared parent working files. Writers are isolated.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub read_only: bool,
     /// Deepest nesting this table's sub-tables may reach (absolute depth). Default 3.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_depth: Option<u32>,

@@ -64,6 +64,26 @@ pub fn create_json(store: &Store, v: Value) -> Result<Value, String> {
     create(store, parse_match(v)?, Some("api"))
 }
 
+/// A writer child of a table that runs in a git worktree gets its own worktree,
+/// branched from the parent's branch, so parallel children never edit the same
+/// files. Read-only children (and tables that set their own worktree) keep theirs.
+fn isolate_writer(t: &mut TableSpec, parent_tree: Option<&Value>) {
+    let Some(pt) = parent_tree else { return };
+    if t.read_only || t.worktree.is_some() {
+        return;
+    }
+    let Some(repo) = pt["repo"].as_str() else {
+        return;
+    };
+    t.worktree = Some(crate::config::WorktreeSpec {
+        repo: Some(repo.to_string()),
+        base: pt["branch"].as_str().map(String::from),
+        branch: None,
+        path: None,
+    });
+    t.cwd = None;
+}
+
 /// Fill what a new table leaves out from the table it comes from (player, cwd, lease,
 /// effort, card). Referee checks are never inherited: each table states its evidence.
 fn inherit(t: &mut TableSpec, from: &TableSpec, cwd: Option<String>) {
@@ -112,11 +132,17 @@ pub fn create_child(store: &Store, parent: &str, v: Value) -> Result<Value, Stri
         .or_else(|| pspec.cwd.clone());
     for t in &mut m.tables {
         inherit(t, &pspec, cwd.clone());
+        isolate_writer(t, p.worktree.as_ref());
         if t.max_depth.is_none() {
             t.max_depth = Some(cap);
         }
     }
     let tables = m.resolve()?;
+    if p.worktree.is_some() && tables.iter().any(|t| !t.read_only && t.worktree.is_none()) {
+        return Err(
+            "child writer requires an isolated worktree because the parent has a worktree".into(),
+        );
+    }
     let ids = store.add_tables(&p.run_id, &tables, None, Some(&p))?;
     store.event(&p.id, "children", json!({"tables": ids}))?;
     Ok(json!({
@@ -316,6 +342,9 @@ pub fn card_answer(
             if x.server.is_none() {
                 x.server = spec.server.clone();
             }
+        }
+        for x in &mut m.tables {
+            isolate_writer(x, t.worktree.as_ref());
         }
         let tables = m.resolve()?;
         let ids = store.add_tables(&t.run_id, &tables, None, None)?;
