@@ -11,13 +11,14 @@
 //! stalls on it.
 
 use crate::api;
-use crate::config::OrchestratorSpec;
+use crate::config::{OrchestratorReviewPolicy, OrchestratorSpec};
 use crate::player::{self, PlayCtx, Player};
 use crate::proc;
 use crate::referee::extract_json;
 use crate::runner::card_text;
 use crate::store::{PendingBall, Store};
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -43,6 +44,9 @@ pub struct Orchestrator {
     pub until_idle: bool,
     pub stop: Arc<AtomicBool>,
 }
+
+/// Asks for a decision on one card under review = "required" before parking it.
+const REQUIRED_TRIES: u32 = 3;
 
 /// One decision for one card.
 #[derive(Debug, Clone, PartialEq)]
@@ -155,6 +159,13 @@ impl Orchestrator {
         let mut fresh = true;
         let (mut handled, mut since_refresh, mut opened, mut calls, mut fallbacks) =
             (0u64, 0u32, 0u32, 0u64, 0u64);
+        // review = "required": a card with no valid decision is never scored by the
+        // referee fallback. It is asked again on the next batch, and after
+        // REQUIRED_TRIES the table is stopped (fail closed) and reported as
+        // needs_review, so the run ends instead of waiting on it.
+        let required = self.spec.review == OrchestratorReviewPolicy::Required;
+        let mut tries: HashMap<String, u32> = HashMap::new();
+        let mut parked: Vec<String> = Vec::new();
         let mut w = store.watch();
         loop {
             if self.stop.load(Ordering::SeqCst) {
@@ -166,7 +177,7 @@ impl Orchestrator {
                     Some(r) => store.table(&p.table_id)?.is_some_and(|t| &t.run_id == r),
                     None => true,
                 };
-                if ok {
+                if ok && !parked.contains(&p.table_id) {
                     pending.push(p);
                 }
             }
@@ -219,6 +230,37 @@ impl Orchestrator {
                     .cloned();
                 let d = match d {
                     Some(d) => d,
+                    None if required => {
+                        fallbacks += 1;
+                        let n = tries.entry(p.table_id.clone()).or_insert(0);
+                        *n += 1;
+                        if *n >= REQUIRED_TRIES {
+                            // Fail closed: stop the table (never a point) and say why.
+                            parked.push(p.table_id.clone());
+                            store.event(
+                                &p.table_id,
+                                "needs_review",
+                                json!({"reason": "no valid orchestrator decision", "tries": *n}),
+                            )?;
+                            if let Err(e) = api::card_answer(
+                                &store,
+                                &p.table_id,
+                                "stop",
+                                "needs review: the orchestrator gave no valid decision (review = \"required\")",
+                                None,
+                                None,
+                            ) {
+                                store.event(
+                                    &p.table_id,
+                                    "orchestrator_error",
+                                    json!({"error": proc::head(&e, 300)}),
+                                )?;
+                            }
+                        } else {
+                            store.event(&p.table_id, "orchestrator_retry", json!({"try": *n}))?;
+                        }
+                        continue;
+                    }
                     None => {
                         fallbacks += 1;
                         Decision {
@@ -262,7 +304,10 @@ impl Orchestrator {
                 since_refresh = 0;
             }
         }
-        Ok(json!({"cards": handled, "calls": calls, "fallbacks": fallbacks, "opened": opened}))
+        Ok(
+            json!({"cards": handled, "calls": calls, "fallbacks": fallbacks, "opened": opened,
+                  "needs_review": parked}),
+        )
     }
 }
 

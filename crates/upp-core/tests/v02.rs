@@ -266,6 +266,39 @@ referee = [{{ kind = "command", run = "grep -qx 42 answer.txt" }}]
 }
 
 #[test]
+fn review_required_never_scores_without_a_decision_and_ends_the_run() {
+    for mode in ["garbage", "crash"] {
+        let d = tempfile::tempdir().unwrap();
+        let toml = format!(
+            r#"
+[orchestrator]
+review = "required"
+player = {{ kind = "shell", command = ["sh", "{orch}"], env = {{ ORCH_MODE = "{mode}" }} }}
+[[table]]
+name = "t"
+ball = "x"
+player = {{ kind = "shell", command = ["sh", "{coder}"] }}
+referee = [{{ kind = "command", run = "grep -qx 42 answer.txt" }}]
+"#,
+            orch = fake("fake-orchestrator.sh"),
+            coder = fake("fake-coder.sh"),
+        );
+        // The referee passes, but nobody reviewed the card: no point, and the run
+        // ends (table stopped as needs_review) instead of waiting forever.
+        let (store, rows) = run_match(d.path(), &toml, 1);
+        assert_eq!(rows[0].status, "stopped", "{mode}: {:?}", rows[0]);
+        let evs: Vec<String> = store
+            .events_since(0, 1000)
+            .unwrap()
+            .into_iter()
+            .map(|e| e.kind)
+            .collect();
+        assert!(evs.contains(&"needs_review".to_string()), "{mode}: {evs:?}");
+        assert_eq!(evs.iter().filter(|k| *k == "orchestrator_retry").count(), 2);
+    }
+}
+
+#[test]
 fn cards_wait_returns_waiting_cards_at_once_and_new_cards_by_cursor() {
     let d = tempfile::tempdir().unwrap();
     let db = d.path().join("upp.db");
@@ -377,6 +410,52 @@ fn sub_tables_have_a_depth_cap_and_inherit_player_and_cwd() {
     assert!(e.contains("depth cap"), "{e}");
     // A child without checks is still refused (no unverified points by inheritance).
     assert!(api::create_child(&store, &pid, json!({"name": "nochecks", "ball": "x"})).is_err());
+}
+
+#[test]
+fn writer_children_of_a_worktree_table_get_their_own_worktree() {
+    let d = tempfile::tempdir().unwrap();
+    let store = Store::open(&d.path().join("upp.db")).unwrap();
+    let c = api::create_json(
+        &store,
+        json!({"name": "parent", "ball": "b", "cwd": d.path(),
+               "player": {"kind": "shell", "command": "cat"},
+               "referee": [{"kind": "command", "run": "true"}]}),
+    )
+    .unwrap();
+    let pid = c["tables"][0]["id"].as_str().unwrap().to_string();
+    let repo = d.path().join("repo");
+    store
+        .set_worktree(
+            &pid,
+            &json!({"repo": repo, "branch": "upp/parent", "path": d.path().join("wt-parent")}),
+        )
+        .unwrap();
+    let kids = api::create_child(
+        &store,
+        &pid,
+        json!({"tables": [
+            {"name": "writer-a", "ball": "a", "referee": [{"kind": "command", "run": "true"}]},
+            {"name": "writer-b", "ball": "b", "referee": [{"kind": "command", "run": "true"}]},
+            {"name": "reader", "ball": "r", "read_only": true, "referee": [{"kind": "command", "run": "true"}]}
+        ]}),
+    )
+    .unwrap();
+    let spec = |i: usize| {
+        store
+            .spec(kids["tables"][i]["id"].as_str().unwrap())
+            .unwrap()
+    };
+    // Writers: each its own worktree, branched from the parent's branch, never the parent's cwd.
+    for i in [0, 1] {
+        let w = spec(i).worktree.expect("writer child gets a worktree");
+        assert_eq!(w.repo.as_deref(), repo.to_str());
+        assert_eq!(w.base.as_deref(), Some("upp/parent"));
+        assert!(spec(i).cwd.is_none());
+    }
+    // Readers share the parent's working directory.
+    assert!(spec(2).worktree.is_none());
+    assert!(spec(2).cwd.is_some());
 }
 
 // ---------------------------------------------------------------- cancellation, effort

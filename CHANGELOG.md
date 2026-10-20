@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased (v0.2.2)
+
+- **Orchestrator review policy (fail closed).** `[orchestrator] review = "referee"` (default,
+  unchanged): a card with no valid decision falls back to the referee. `review = "required"`:
+  a missing or invalid decision never scores a point. The card is asked again on the next
+  batch, and after 3 tries the table is stopped with a `needs_review` event and listed under
+  `needs_review` in the orchestrator's result, so the run ends instead of waiting on it.
+- **Writer children get their own worktree.** Sub-tables (`create --parent`, `open`, `next`)
+  of a table that runs in a git worktree each get their own worktree, branched from the
+  parent's branch, so parallel children never edit the same files. `read_only = true`
+  children share the parent's working directory; if a writer cannot be isolated, creating
+  it is refused.
+
 ## v0.2.1 (2026-10-19) - Token carry for agent CLI players
 
 With Claude Code and Codex as players, v0.2.0's tables used 1.3-2.8x more tokens than one
