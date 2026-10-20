@@ -20,6 +20,12 @@
 - **The wall lease survives resumes.** Time used before a crash counts against the lease,
   so a resumed table cannot run longer than its lease in total.
 
+- **uppd authentication.** Any non-loopback `--listen` requires a bearer token; `--auth`
+  requires it on loopback too. The token comes from `UPPD_TOKEN`, `--token-file`, or
+  `$XDG_CONFIG_HOME/upp/token` (created 0600; only its path is printed). `/health` stays open.
+- **Machine-wide parallel cap.** `UPP_GLOBAL_PARALLEL=N` / `uppd --global-parallel N`: at most
+  N tables running across every process sharing the store, checked atomically at claim time.
+
 ## v0.2.1 (2026-10-19) - Token carry for agent CLI players
 
 With Claude Code and Codex as players, v0.2.0's tables used 1.3-2.8x more tokens than one

@@ -29,6 +29,9 @@ pub struct Scheduler {
     pub until_idle: bool,
     /// Set to stop claiming; `run` returns once in-flight tables end.
     pub stop: Arc<AtomicBool>,
+    /// Machine-wide cap across every scheduler sharing the store (`UPP_GLOBAL_PARALLEL`,
+    /// `uppd --global-parallel`): one GPU or model endpoint shared by several runs.
+    pub global_parallel: Option<usize>,
 }
 
 pub fn owner_tag(role: &str) -> String {
@@ -70,6 +73,10 @@ impl Scheduler {
             run: None,
             until_idle: false,
             stop: Arc::new(AtomicBool::new(false)),
+            global_parallel: std::env::var("UPP_GLOBAL_PARALLEL")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .filter(|n: &usize| *n > 0),
         }
     }
 
@@ -91,7 +98,12 @@ impl Scheduler {
                 let waiting = store.count_in_phase(&self.owner, "children")?;
                 let active = handles.len().saturating_sub(waiting);
                 let free = self.max_parallel.saturating_sub(active);
-                for t in store.claim(&self.owner, free, self.run.as_deref())? {
+                for t in store.claim_capped(
+                    &self.owner,
+                    free,
+                    self.run.as_deref(),
+                    self.global_parallel,
+                )? {
                     let db = self.db.clone();
                     let id = t.id.clone();
                     handles.push(std::thread::spawn(move || {

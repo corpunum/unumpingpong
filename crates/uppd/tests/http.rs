@@ -136,3 +136,65 @@ impl Drop for KillOnDrop {
         let _ = self.0.wait();
     }
 }
+
+#[test]
+fn a_token_guards_the_api_but_not_health() {
+    let d = tempfile::tempdir().unwrap();
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let addr = format!("127.0.0.1:{port}");
+    let token_file = d.path().join("cfg/token");
+    let child = Command::new(env!("CARGO_BIN_EXE_uppd"))
+        .args(["--listen", &addr, "--auth", "--token-file"])
+        .arg(&token_file)
+        .arg("--db")
+        .arg(d.path().join("upp.db"))
+        .env_remove("UPPD_TOKEN")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let _guard = KillOnDrop(child);
+    let base = format!("http://{addr}");
+    let t0 = Instant::now();
+    while ureq::get(&format!("{base}/health")).call().is_err() {
+        assert!(t0.elapsed() < Duration::from_secs(10), "uppd never came up");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    // The token was created (private to the owner) and is never needed for /health.
+    let token = std::fs::read_to_string(&token_file).unwrap();
+    assert!(token.len() >= 32);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(&token_file).unwrap().permissions().mode();
+        assert_eq!(mode & 0o077, 0, "token file must not be readable by others");
+    }
+    match ureq::get(&format!("{base}/api/tables")).call() {
+        Err(ureq::Error::Status(code, _)) => assert_eq!(code, 401),
+        other => panic!("expected 401, got {other:?}"),
+    }
+    match ureq::get(&format!("{base}/api/tables"))
+        .set("Authorization", "Bearer wrong")
+        .call()
+    {
+        Err(ureq::Error::Status(code, _)) => assert_eq!(code, 401),
+        other => panic!("expected 401, got {other:?}"),
+    }
+    let ok: Value = ureq::get(&format!("{base}/api/tables"))
+        .set("Authorization", &format!("Bearer {}", token.trim()))
+        .call()
+        .unwrap()
+        .into_json()
+        .unwrap();
+    assert!(ok.is_array() || ok.is_object(), "{ok}");
+    // EventSource clients cannot set headers: ?token= works too.
+    assert!(
+        ureq::get(&format!("{base}/api/pending?token={}", token.trim()))
+            .call()
+            .is_ok()
+    );
+}

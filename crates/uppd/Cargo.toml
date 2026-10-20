@@ -14,6 +14,7 @@ name = "uppd"
 path = "src/main.rs"
 
 [dependencies]
+uuid.workspace = true
 upp-core.workspace = true
 serde_json.workspace = true
 tiny_http.workspace = true

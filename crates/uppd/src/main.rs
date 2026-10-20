@@ -6,6 +6,7 @@
 use serde_json::{json, Value};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tiny_http::{Header, Method, Request, Response, Server};
 use upp_core::store::{default_db_path, Store};
@@ -14,7 +15,15 @@ use upp_core::{api, Scheduler};
 const HELP: &str = "uppd: UnumPingPong daemon (runs queued tables; HTTP/JSON API + SSE)
 
 USAGE:
-  uppd [--listen 127.0.0.1:7878] [--db PATH] [--parallel N]
+  uppd [--listen 127.0.0.1:7878] [--db PATH] [--parallel N] [--global-parallel N]
+       [--auth] [--token-file PATH]
+
+  --global-parallel N  at most N tables running at once across every process sharing
+                       the store (also UPP_GLOBAL_PARALLEL); one GPU or endpoint, many runs
+  --auth               require a bearer token on loopback too (always required otherwise)
+  --token-file PATH    the token (default: $XDG_CONFIG_HOME/upp/token, created 0600 if
+                       missing); UPPD_TOKEN overrides. Send `Authorization: Bearer <token>`
+                       (or `?token=` for an EventSource). /health stays open.
 
 API:
   GET  /health                        version, store, parallel cap
@@ -34,12 +43,16 @@ API:
   GET  /api/events[?since=ID]         Server-Sent Events (one `data:` JSON per event)
   GET  /api/export[?run=ID]           every rally as JSON lines
 
-Binds to loopback by default; there is no authentication. Docs: https://github.com/corpunum/unumpingpong";
+Binds to loopback by default (no token needed there unless --auth); any other address
+always requires the token. Docs: https://github.com/corpunum/unumpingpong";
 
 struct Opts {
     listen: String,
     db: PathBuf,
     parallel: usize,
+    global_parallel: Option<usize>,
+    auth: bool,
+    token_file: Option<PathBuf>,
 }
 
 fn parse() -> Result<Opts, String> {
@@ -48,6 +61,9 @@ fn parse() -> Result<Opts, String> {
         listen: "127.0.0.1:7878".into(),
         db: default_db_path(),
         parallel: 4,
+        global_parallel: None,
+        auth: false,
+        token_file: None,
     };
     let mut p = lexopt::Parser::from_env();
     while let Some(arg) = p.next().map_err(|e| e.to_string())? {
@@ -67,6 +83,16 @@ fn parse() -> Result<Opts, String> {
                     .parse()
                     .map_err(|e| format!("--parallel: {e}"))?
             }
+            Long("global-parallel") => {
+                o.global_parallel = Some(
+                    p.value()
+                        .map_err(|e| e.to_string())?
+                        .parse()
+                        .map_err(|e| format!("--global-parallel: {e}"))?,
+                )
+            }
+            Long("auth") => o.auth = true,
+            Long("token-file") => o.token_file = Some(p.value().map_err(|e| e.to_string())?.into()),
             Short('V') | Long("version") => {
                 println!("uppd {}", upp_core::VERSION);
                 std::process::exit(0);
@@ -98,7 +124,11 @@ fn main() {
 fn serve(o: Opts) -> Result<(), String> {
     let db = std::path::absolute(&o.db).unwrap_or(o.db.clone());
     Store::open(&db)?;
-    let sched = Scheduler::new(&db, o.parallel, "uppd");
+    let token = token_for(&o)?.map(Arc::new);
+    let mut sched = Scheduler::new(&db, o.parallel, "uppd");
+    if o.global_parallel.is_some() {
+        sched.global_parallel = o.global_parallel.filter(|n| *n > 0);
+    }
     std::thread::spawn(move || {
         if let Err(e) = sched.run() {
             eprintln!("uppd: scheduler stopped: {e}");
@@ -117,9 +147,118 @@ fn serve(o: Opts) -> Result<(), String> {
     for req in server.incoming_requests() {
         let db = db.clone();
         let parallel = o.parallel;
-        std::thread::spawn(move || handle(req, &db, parallel));
+        let token = token.clone();
+        std::thread::spawn(move || {
+            if let Some(t) = token {
+                if !authorized(&req, &t) {
+                    return reply(
+                        req,
+                        401,
+                        &json!({"ok": false, "error": "unauthorized: send Authorization: Bearer <token>"}),
+                    );
+                }
+            }
+            handle(req, &db, parallel)
+        });
     }
     Ok(())
+}
+
+fn loopback(listen: &str) -> bool {
+    let host = listen.rsplit_once(':').map(|(h, _)| h).unwrap_or(listen);
+    let host = host.trim_start_matches('[').trim_end_matches(']');
+    host == "localhost"
+        || host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback())
+}
+
+fn default_token_path() -> PathBuf {
+    let base = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("APPDATA").map(PathBuf::from))
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
+        .unwrap_or_else(|| PathBuf::from("."));
+    base.join("upp").join("token")
+}
+
+/// The bearer token, when one is required: on a non-loopback address always, on loopback
+/// with --auth / --token-file / UPPD_TOKEN. A missing token file is created (0600) with a
+/// random token; its path is printed, never the token.
+fn token_for(o: &Opts) -> Result<Option<String>, String> {
+    if let Ok(t) = std::env::var("UPPD_TOKEN") {
+        if !t.trim().is_empty() {
+            return Ok(Some(t.trim().to_string()));
+        }
+    }
+    if !(o.auth || o.token_file.is_some() || !loopback(&o.listen)) {
+        return Ok(None);
+    }
+    let path = o.token_file.clone().unwrap_or_else(default_token_path);
+    if let Ok(t) = std::fs::read_to_string(&path) {
+        if !t.trim().is_empty() {
+            eprintln!("uppd: token required (from {})", path.display());
+            return Ok(Some(t.trim().to_string()));
+        }
+    }
+    let t = format!(
+        "{}{}",
+        uuid::Uuid::new_v4().simple(),
+        uuid::Uuid::new_v4().simple()
+    );
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    }
+    write_private(&path, &t).map_err(|e| format!("{}: {e}", path.display()))?;
+    eprintln!("uppd: token required; created {}", path.display());
+    Ok(Some(t))
+}
+
+#[cfg(unix)]
+fn write_private(path: &Path, s: &str) -> std::io::Result<()> {
+    use std::os::unix::fs::OpenOptionsExt;
+    let mut f = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(path)?;
+    f.write_all(s.as_bytes())
+}
+
+#[cfg(not(unix))]
+fn write_private(path: &Path, s: &str) -> std::io::Result<()> {
+    std::fs::write(path, s)
+}
+
+fn authorized(req: &Request, token: &str) -> bool {
+    let url = req.url();
+    if url == "/health" || url.starts_with("/health?") {
+        return true;
+    }
+    let bearer = req
+        .headers()
+        .iter()
+        .find(|h| h.field.equiv("Authorization"))
+        .and_then(|h| {
+            h.value
+                .as_str()
+                .strip_prefix("Bearer ")
+                .map(str::trim)
+                .map(String::from)
+        });
+    let given = bearer.or_else(|| {
+        query(url)
+            .into_iter()
+            .find(|(k, _)| k == "token")
+            .map(|(_, v)| v)
+    });
+    given.is_some_and(|g| same(g.as_bytes(), token.as_bytes()))
+}
+
+/// Constant-time comparison (no early exit on the first differing byte).
+fn same(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
 fn json_header() -> Header {
@@ -366,5 +505,26 @@ mod tests {
         assert_eq!(q[0], ("tables".into(), "a,b,c".into()));
         assert_eq!(q[1], ("timeout".into(), "5".into()));
         assert_eq!(decode("a+b%20c%"), "a b c%");
+    }
+}
+
+#[cfg(test)]
+mod auth_tests {
+    use super::*;
+
+    #[test]
+    fn only_loopback_addresses_may_run_without_a_token() {
+        for a in ["127.0.0.1:7878", "localhost:1", "[::1]:7878", "127.0.0.2:9"] {
+            assert!(loopback(a), "{a}");
+        }
+        for a in [
+            "0.0.0.0:7878",
+            "192.168.1.5:7878",
+            "[::]:7878",
+            "example.com:80",
+        ] {
+            assert!(!loopback(a), "{a}");
+        }
+        assert!(same(b"abc", b"abc") && !same(b"abc", b"abd") && !same(b"abc", b"ab"));
     }
 }

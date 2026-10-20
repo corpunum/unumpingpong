@@ -441,6 +441,12 @@ requests they are already serving to that traffic (`/health` `in_flight`, `/slot
 `is_processing`; at least one slot stays yours), and caps at the sum (4 when nothing answers).
 A slot count is admission, not throughput: see the benchmark.
 
+Several runs on one machine (two `upp run`s and a `uppd`, say) each cap only their own tables.
+`UPP_GLOBAL_PARALLEL=N` (or `uppd --global-parallel N`) caps the tables running at once across
+every process that shares the store: one GPU or model endpoint, many runs. Each claim checks
+the cap in the same SQL update, so two processes cannot both take the last slot. Tables
+waiting on their own sub-tables do not count.
+
 ## Match file reference
 
 ```toml
@@ -532,8 +538,12 @@ GET  /api/events[?since=ID]            text/event-stream, one JSON event per mes
 GET  /api/export[?run=ID]              JSON lines
 ```
 
-Loopback only by default and **no authentication**: anyone who can reach the port can run
-commands as you through a `shell` player. A systemd user unit is in
+Loopback only by default. Any other `--listen` address always requires a bearer token
+(`Authorization: Bearer <token>`, or `?token=` for an EventSource); `--auth` requires it on
+loopback too. The token comes from `UPPD_TOKEN`, `--token-file`, or
+`$XDG_CONFIG_HOME/upp/token` (created 0600 with a random token if missing; uppd prints the
+path, never the token). `/health` stays open. Anyone with the token can run commands as you
+through a `shell` player, so treat it like an SSH key. A systemd user unit is in
 [packaging/systemd](packaging/systemd/uppd.service).
 
 ## MCP server
