@@ -33,11 +33,12 @@ answer, so it cannot reach the referee as if the agent had answered.
 The session persists across rallies, so the agent keeps its context, memory and tools. The
 referee still runs outside OpenUnum: an OpenUnum agent cannot score its own point.
 
-**Status: API checked** against OpenUnum's route handlers (`src/server/routes/chat_tools.mjs`:
-`POST /api/chat` reads `body.turnId`; `GET /api/chat/pending`; the completed payload carries
-`turnId`, see `src/server/services/chat_runtime.mjs`). Tested against a scripted HTTP fake
-(busy session, queued 202, another turn's late result, cancelled, timed out). Not run against
-a live OpenUnum (the owner's instance was left untouched).
+**Status: run live (2026-10-20).** Two parallel tables with `kind = "openunum"` against a live
+OpenUnum (local Qwen 3.6 35B via Halogen), each a small Python task checked by a `python3`
+referee: **2/2 points on rally 1** (slugify 116 s, fib 437 s on a shared, busy model endpoint).
+The turn ids lined up and no reply from another turn was accepted. Also tested against a scripted
+HTTP fake (busy session, queued 202, another turn's late result, cancelled, timed out).
+Known gap: OpenUnum's chat reply does not report token usage, so these tables show 0 tokens.
 
 ## As a server
 
