@@ -4,7 +4,7 @@ members = ["crates/upp-core", "crates/upp", "crates/uppd"]
 exclude = ["examples"]
 
 [workspace.package]
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 license = "Apache-2.0"
 rust-version = "1.85"
@@ -13,7 +13,7 @@ homepage = "https://github.com/corpunum/unumpingpong"
 authors = ["corpunum"]
 
 [workspace.dependencies]
-upp-core = { path = "crates/upp-core", version = "0.2.1" }
+upp-core = { path = "crates/upp-core", version = "0.2.2" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = { version = "0.8", default-features = false, features = ["parse"] }
