@@ -1,0 +1,95 @@
+{
+ "repo_dir_default": "../openunum",
+ "tasks": [
+  {
+   "id": "trading-metrics-401870f",
+   "repo": "corpunum/openunum",
+   "commit": "401870fada7119f7365be5ebc024a176f711219a",
+   "base": "401870fada7119f7365be5ebc024a176f711219a^",
+   "test": "tests/unit/trading-metrics.test.mjs",
+   "fixed_file": "src/server/services/trading-metrics.mjs",
+   "issue": "count strategy-prefixed fills (maker:fill_*)"
+  },
+  {
+   "id": "tool-map-7681fe8",
+   "repo": "corpunum/openunum",
+   "commit": "7681fe815899c0aeb1cffd425cf8478531505ccb",
+   "base": "7681fe815899c0aeb1cffd425cf8478531505ccb^",
+   "test": "tests/unit/tool-map.test.mjs",
+   "fixed_file": "src/tools/tool-map.mjs",
+   "issue": "raw rows use the header-free body view"
+  },
+  {
+   "id": "models-9151b9e",
+   "repo": "corpunum/openunum",
+   "commit": "9151b9ed744a6b491a3221da9b3ea69b1d671d56",
+   "base": "9151b9ed744a6b491a3221da9b3ea69b1d671d56^",
+   "test": "tests/unit/capability-probe-failure.test.mjs",
+   "fixed_file": "src/models/model-capabilities.mjs",
+   "issue": "don't cache a capability probe that failed"
+  },
+  {
+   "id": "council-5f832b6",
+   "repo": "corpunum/openunum",
+   "commit": "5f832b63a4bb808e030d4fce9f4dfd139bf10d0a",
+   "base": "5f832b63a4bb808e030d4fce9f4dfd139bf10d0a^",
+   "test": "tests/unit/unum-council-v2.test.mjs",
+   "fixed_file": "src/skills/unum-council/index.mjs",
+   "issue": "label the deterministic consolidation fallback honestly"
+  },
+  {
+   "id": "memory-e6d2f31",
+   "repo": "corpunum/openunum",
+   "commit": "e6d2f312f2b3bf2b566f84f10dffb7c41d7e2dc1",
+   "base": "e6d2f312f2b3bf2b566f84f10dffb7c41d7e2dc1^",
+   "test": "tests/unit/context-loads-newest.test.mjs",
+   "fixed_file": "src/memory/store.mjs",
+   "issue": "context loader returns the newest messages, not the oldest (#77)"
+  },
+  {
+   "id": "sessions-f25516b",
+   "repo": "corpunum/openunum",
+   "commit": "f25516b3eed33826987642062c128377e957658a",
+   "base": "f25516b3eed33826987642062c128377e957658a^",
+   "test": "tests/unit/subagent-manager.test.mjs",
+   "fixed_file": "src/core/subagent-manager.mjs",
+   "issue": "a step-capped subagent gets another turn instead of \"done\""
+  },
+  {
+   "id": "scheduler-3b7a832",
+   "repo": "corpunum/openunum",
+   "commit": "3b7a8323e5a0eef52da92e20a383130744c33909",
+   "base": "3b7a8323e5a0eef52da92e20a383130744c33909^",
+   "test": "tests/unit/luna-worker.test.mjs",
+   "fixed_file": "src/core/session-scheduler.mjs",
+   "issue": "hosted workers run up to maxConcurrent tasks at once"
+  },
+  {
+   "id": "tools-4707051",
+   "repo": "corpunum/openunum",
+   "commit": "47070514e7a60601c5bbe097be86542e76db5684",
+   "base": "47070514e7a60601c5bbe097be86542e76db5684^",
+   "test": "tests/unit/runtime-linked-worktree-writes.test.mjs",
+   "fixed_file": "src/tools/runtime.mjs",
+   "issue": "keep strict workspace_only mode unwidened by linked worktrees"
+  },
+  {
+   "id": "intent-6bd97cf",
+   "repo": "corpunum/openunum",
+   "commit": "6bd97cf987cb342015f653075273a2a9b876e091",
+   "base": "6bd97cf987cb342015f653075273a2a9b876e091^",
+   "test": "tests/unit/execution-intent.test.mjs",
+   "fixed_file": "src/core/execution-intent.mjs",
+   "issue": "a scoped 'do not run X' no longer withholds execution for the whole turn"
+  },
+  {
+   "id": "core-d3bd2fe",
+   "repo": "corpunum/openunum",
+   "commit": "d3bd2fe9804ed1cd98d5f2f057dd9f85780c1db2",
+   "base": "d3bd2fe9804ed1cd98d5f2f057dd9f85780c1db2^",
+   "test": "tests/unit/media-trace-survives-empty-final-text.test.mjs",
+   "fixed_file": "src/core/chat-orchestrator.mjs",
+   "issue": "a completed media generation no longer loses its trace when finalText is empty"
+  }
+ ]
+}

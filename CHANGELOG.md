@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.3.0 (2026-10-21) - Real-repository benchmark, shared sessions, sandboxed agents
+
+UnumPingPong was measured on 10 real bug fixes from a production repository, with nine
+player setups: Claude Haiku, GPT Luna (Codex CLI, and inside the OpenUnum agent loop), local
+Qwen 3.6 35B, free opencode and NVIDIA NIM models, and small local models on a ROG Ally and a
+Galaxy S22. Results: [bench/repo/results.md](bench/repo/results.md).
+
+- **`share = "<key>"` (tables and defaults).** Tables with the same key take turns in one
+  long-lived player session instead of one session each. Each ball is prefixed with that
+  table's working directory. An option, not a default: in our runs it did not pay off for
+  Codex (most tokens of any arm).
+- **Players see their table directory in `$PWD`.** Spawned players got the caller's `$PWD`,
+  and tools that trust it (opencode) worked in the wrong folder; one benchmark agent left its
+  task folder that way. `PWD` is now set on every spawn and opencode also gets `--dir`.
+- **`UPP_PLAYER_TRACE=<file>`** appends every raw message a persistent agent CLI sends, to
+  audit token accounting against the tool's own counters.
+- **Benchmark harness `bench/repo`**: tasks built with `git archive` (no history to look the
+  fix up), referee scripts kept outside the agent's checkout, arms A (one session),
+  B (tables), C (shared session), and `agent-sandbox.sh`: a rootless podman sandbox that lets
+  opencode or Codex write only the task folder.
+- **README rewritten** around the idea and the measured results; full option reference in
+  [docs/REFERENCE.md](docs/REFERENCE.md), earlier synthetic benchmarks in
+  [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+- For Codex players, a short `system_prompt` cut table token use by 34% at the same 10/10.
+
 ## v0.2.2 (2026-10-20) - Reliability hardening (review follow-up)
 
 An external review of v0.2.1 found four gaps (a fail-open orchestrator fallback, blind replay

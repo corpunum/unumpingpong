@@ -326,7 +326,14 @@ impl AgentPlayer {
             }
             Flavor::Opencode => {
                 // opencode run --format json [-m provider/model] [-s ID] ARGS MESSAGE
-                a.extend([s("run"), s("--format"), s("json")]);
+                // --dir: opencode must work in the table's directory, whatever $PWD says.
+                a.extend([
+                    s("run"),
+                    s("--format"),
+                    s("json"),
+                    s("--dir"),
+                    cwd.to_string_lossy().into_owned(),
+                ]);
                 if let Some(m) = &self.spec.model {
                     a.extend([s("-m"), m.clone()]);
                 }
@@ -667,6 +674,7 @@ impl AgentPlayer {
                     return Turn::Failed("codex cancelled (table stopped)".into());
                 }
             };
+            trace_line(&line);
             let Ok(v) = serde_json::from_str::<Value>(line.trim()) else {
                 continue;
             };
@@ -1141,6 +1149,21 @@ fn find_key<'a>(v: &'a Value, key: &str) -> Option<&'a str> {
         }
         Value::Array(a) => a.iter().find_map(|x| find_key(x, key)),
         _ => None,
+    }
+}
+
+/// `UPP_PLAYER_TRACE=<file>`: append every raw message a persistent agent CLI sends (for
+/// auditing token accounting against the tool's own counters).
+fn trace_line(line: &str) {
+    if let Some(path) = std::env::var_os("UPP_PLAYER_TRACE") {
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+        {
+            let _ = writeln!(f, "{}", line.trim_end());
+        }
     }
 }
 

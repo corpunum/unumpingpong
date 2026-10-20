@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 360" width="900" height="360" font-family="ui-sans-serif, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+  <title>UnumPingPong: a server serves a task, an AI player hits back an answer, an independent referee checks it, and only verified work scores a point</title>
+  <style>
+    .cap { font-size: 15px; fill: #e8edf7; opacity: 0; }
+    .who { font-size: 13px; font-weight: 700; letter-spacing: .12em; fill: #e8edf7; }
+    .sub { font-size: 11px; fill: #93a1bd; }
+    .tag { font-size: 12px; font-weight: 700; }
+    /* 12 s loop: rally 1 is returned with the referee's output, rally 2 scores. */
+    .c1 { animation: show 12s infinite; animation-delay: 0s; }
+    .c2 { animation: show 12s infinite; animation-delay: 1.5s; }
+    .c3 { animation: show 12s infinite; animation-delay: 3s; }
+    .c4 { animation: show 12s infinite; animation-delay: 4.5s; }
+    .c5 { animation: show 12s infinite; animation-delay: 6s; }
+    .c6 { animation: show 12s infinite; animation-delay: 7.5s; }
+    .c7 { animation: show 12s infinite; animation-delay: 9s; }
+    .c8 { animation: show 12s infinite; animation-delay: 10.5s; }
+    @keyframes show { 0% { opacity: 0 } 0.8% { opacity: 1 } 11.4% { opacity: 1 } 12.2% { opacity: 0 } 100% { opacity: 0 } }
+    .fail { animation: flashr 12s infinite; }
+    .pass { animation: flashg 12s infinite; }
+    @keyframes flashr { 0%,49% { fill: #1c2540 } 50%,61% { fill: #e5484d } 63%,100% { fill: #1c2540 } }
+    @keyframes flashg { 0%,86% { fill-opacity: 0 } 87.5%,98% { fill-opacity: 1 } 99%,100% { fill-opacity: 0 } }
+    .score { animation: score 12s infinite; }
+    @keyframes score { 0%,87% { opacity: 0 } 88%,99% { opacity: 1 } 100% { opacity: 0 } }
+    .zero { animation: zero 12s infinite; }
+    @keyframes zero { 0%,86% { opacity: 1 } 88%,99% { opacity: 0 } 100% { opacity: 1 } }
+  </style>
+  <rect width="900" height="360" rx="18" fill="#0b1020"/>
+
+  <!-- table -->
+  <rect x="120" y="150" width="660" height="150" rx="6" fill="#0f6b45" stroke="#e8edf7" stroke-width="3"/>
+  <line x1="120" y1="225" x2="780" y2="225" stroke="#e8edf7" stroke-width="1.5" opacity=".6"/>
+  <!-- net = the referee -->
+  <rect x="446" y="132" width="8" height="176" rx="2" fill="#e8edf7"/>
+  <rect class="fail" x="396" y="80" width="108" height="46" rx="9" fill="#1c2540"/>
+  <rect class="pass" x="396" y="80" width="108" height="46" rx="9" fill="#30a46c" fill-opacity="0"/>
+  <text x="450" y="99" text-anchor="middle" class="who" font-size="11">REFEREE</text>
+  <text x="450" y="116" text-anchor="middle" class="sub">tests, not an LLM</text>
+
+  <!-- player (left) -->
+  <g transform="translate(70 225)">
+    <ellipse cx="0" cy="0" rx="26" ry="30" fill="#e5484d"/>
+    <rect x="-5" y="26" width="10" height="34" rx="4" fill="#c9a26b"/>
+  </g>
+  <text x="70" y="318" text-anchor="middle" class="who">PLAYER</text>
+  <text x="70" y="334" text-anchor="middle" class="sub">any AI agent</text>
+
+  <!-- server (right) -->
+  <g transform="translate(830 225)">
+    <ellipse cx="0" cy="0" rx="26" ry="30" fill="#3e63dd"/>
+    <rect x="-5" y="26" width="10" height="34" rx="4" fill="#c9a26b"/>
+  </g>
+  <text x="830" y="318" text-anchor="middle" class="who">SERVER</text>
+  <text x="830" y="334" text-anchor="middle" class="sub">you / orchestrator</text>
+
+  <!-- the ball: serve -> player -> back over the referee net (fail) -> player -> back (pass) -->
+  <circle r="8" fill="#ffffff">
+    <animateMotion dur="12s" repeatCount="indefinite" keyTimes="0;0.125;0.25;0.375;0.5;0.625;0.75;0.875;1" calcMode="linear"
+      values="800,215; 560,262; 100,215; 300,262; 450,140; 100,215; 300,262; 450,140; 800,215"/>
+  </circle>
+
+  <!-- scoreboard -->
+  <rect x="34" y="26" width="140" height="44" rx="10" fill="#1c2540"/>
+  <text x="50" y="54" class="tag" fill="#93a1bd">POINTS</text>
+  <text class="zero" x="140" y="56" font-size="22" font-weight="800" fill="#e8edf7">0</text>
+  <text class="score" x="140" y="56" font-size="22" font-weight="800" fill="#30a46c">1</text>
+
+  <!-- the story, one caption at a time -->
+  <text class="cap c1" x="450" y="56" text-anchor="middle">🏓 serve: “make the failing test pass”</text>
+  <text class="cap c2" x="450" y="56" text-anchor="middle">to any AI player: Claude Code · Codex · opencode · local Qwen</text>
+  <text class="cap c3" x="450" y="56" text-anchor="middle">the player writes a fix and hits it back</text>
+  <text class="cap c4" x="450" y="56" text-anchor="middle">the referee runs the real tests …</text>
+  <text class="cap c5" x="450" y="56" text-anchor="middle" style="fill:#ff8b8e">✗ 1 test fails → ball returned with the exact error</text>
+  <text class="cap c6" x="450" y="56" text-anchor="middle">same player, same session, a sharper second try</text>
+  <text class="cap c7" x="450" y="56" text-anchor="middle">the referee runs the tests again …</text>
+  <text class="cap c8" x="450" y="56" text-anchor="middle" style="fill:#6ee7a8">✓ all tests pass → POINT · only verified work scores</text>
+</svg>

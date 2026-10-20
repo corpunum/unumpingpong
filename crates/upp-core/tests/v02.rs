@@ -483,6 +483,76 @@ fn the_wall_lease_counts_time_used_before_a_resume() {
     assert!(store.rallies(&id).unwrap().is_empty());
 }
 
+#[test]
+fn shared_session_tables_take_turns_and_are_told_their_directory() {
+    let d = tempfile::tempdir().unwrap();
+    for t in ["a", "b"] {
+        std::fs::create_dir_all(d.path().join(t)).unwrap();
+    }
+    let toml = format!(
+        r#"
+[defaults]
+share = "one-session"
+player = {{ kind = "shell", command = ["sh", "{coder}"], env = {{ FAKE_SLEEP = "0.4", FAKE_PASS_ON = "1", FAKE_LOG = "log" }} }}
+referee = [{{ kind = "command", run = "grep -qx 42 answer.txt" }}]
+[[table]]
+name = "a"
+cwd = "a"
+ball = "x"
+[[table]]
+name = "b"
+cwd = "b"
+ball = "y"
+"#,
+        coder = fake("fake-coder.sh")
+    );
+    let (store, rows) = run_match(d.path(), &toml, 2);
+    assert!(rows.iter().all(|t| t.status == "point"), "{rows:?}");
+    // One at a time: the two tables' rallies never overlap in time.
+    let (ra, rb) = (
+        store.rallies(&by_name(&rows, "a").id).unwrap(),
+        store.rallies(&by_name(&rows, "b").id).unwrap(),
+    );
+    let (a0, a1, b0, b1) = (
+        ra[0].started_ms,
+        ra[0].ended_ms,
+        rb[0].started_ms,
+        rb[0].ended_ms,
+    );
+    assert!(a1 <= b0 || b1 <= a0, "overlap: a {a0}-{a1}, b {b0}-{b1}");
+    // Each brief names the table's own directory (the shared process may have started elsewhere).
+    for t in ["a", "b"] {
+        let ball = std::fs::read_to_string(d.path().join(t).join("log/ball-1.txt")).unwrap();
+        assert!(
+            ball.starts_with(&format!("[Table {t}: work only in ")),
+            "{ball}"
+        );
+    }
+}
+
+#[test]
+fn players_see_their_table_directory_in_pwd() {
+    // A tool that trusts $PWD over the process cwd (opencode does) must still land in the
+    // table's directory, not wherever `upp` was started (live 10-20 incident).
+    let d = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(d.path().join("t")).unwrap();
+    let toml = r#"
+[[table]]
+name = "pwd"
+cwd = "t"
+ball = "x"
+player = { kind = "shell", command = ["python3", "-c", "import os,sys; sys.stdin.read(); open('pwd.txt','w').write(os.environ.get('PWD','')); print('ok')"] }
+referee = [{ kind = "command", run = "test -s pwd.txt" }]
+"#;
+    let (_, rows) = run_match(d.path(), toml, 1);
+    assert_eq!(rows[0].status, "point", "{rows:?}");
+    let got = std::fs::read_to_string(d.path().join("t/pwd.txt")).unwrap();
+    assert_eq!(
+        std::fs::canonicalize(&got).unwrap(),
+        std::fs::canonicalize(d.path().join("t")).unwrap()
+    );
+}
+
 // ---------------------------------------------------------------- cancellation, effort
 
 #[test]

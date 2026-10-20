@@ -125,6 +125,27 @@ pub trait Player: Send {
     }
 }
 
+/// A player session shared by several tables (`share = "key"`); the lock is held for a
+/// table's whole run, so tables with the same key take turns.
+pub type SharedPlayer = std::sync::Arc<std::sync::Mutex<Box<dyn Player>>>;
+
+static SHARED: std::sync::OnceLock<
+    std::sync::Mutex<std::collections::HashMap<String, SharedPlayer>>,
+> = std::sync::OnceLock::new();
+
+/// The shared session for `key` (scoped by the caller, e.g. run id + share key), built from
+/// `spec` by the first table that asks.
+pub fn shared(key: &str, spec: &PlayerSpec, ctx: &PlayCtx) -> Result<SharedPlayer, String> {
+    let pool = SHARED.get_or_init(Default::default);
+    let mut m = pool.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(p) = m.get(key) {
+        return Ok(p.clone());
+    }
+    let p: SharedPlayer = std::sync::Arc::new(std::sync::Mutex::new(build(spec, ctx)?));
+    m.insert(key.to_string(), p.clone());
+    Ok(p)
+}
+
 pub fn build(spec: &PlayerSpec, _ctx: &PlayCtx) -> Result<Box<dyn Player>, String> {
     Ok(match spec {
         PlayerSpec::Shell {

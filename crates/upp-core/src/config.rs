@@ -475,6 +475,12 @@ pub struct TableSpec {
     /// Whether this child only reads shared parent working files. Writers are isolated.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub read_only: bool,
+    /// Shared player session: tables of a run with the same `share` key reuse ONE player
+    /// session (one process / conversation), one table at a time. For players whose cost is
+    /// dominated by session setup and whose provider caches the growing context cheaply
+    /// (Codex), this keeps that reuse while every table still gets its own referee loop.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub share: Option<String>,
     /// Deepest nesting this table's sub-tables may reach (absolute depth). Default 3.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_depth: Option<u32>,
@@ -513,6 +519,9 @@ pub struct Defaults {
     pub worktree: Option<WorktreeSpec>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_depth: Option<u32>,
+    /// Default for `share` (see TableSpec).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub share: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
@@ -657,6 +666,9 @@ impl MatchFile {
             }
             if t.effort.is_none() {
                 t.effort = d.effort.clone();
+            }
+            if t.share.is_none() {
+                t.share = d.share.clone();
             }
             if t.worktree.is_none() {
                 t.worktree = d.worktree.clone();

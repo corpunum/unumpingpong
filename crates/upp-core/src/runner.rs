@@ -505,7 +505,15 @@ fn run_inner(store: &Store, id: &str) -> Result<String, String> {
         ("table", spec.name.as_str()),
     ];
     // {{search:...}} before {{file:...}}: a file's own text is never expanded.
-    let brief = render_files(&search::render(&render(&ball_t, &vars), &cwd), &cwd)
+    let brief = (if spec.share.is_some() {
+        format!(
+            "[Table {}: work only in {} -- cd there before any command.]\n",
+            spec.name,
+            cwd.display()
+        )
+    } else {
+        String::new()
+    }) + &render_files(&search::render(&render(&ball_t, &vars), &cwd), &cwd)
         + &search::context(&spec.context_search, &cwd)
         + &describe_checks(&spec);
     let goal = render(&goal, &vars);
@@ -524,7 +532,29 @@ fn run_inner(store: &Store, id: &str) -> Result<String, String> {
         ..PlayCtx::new(id, 0, cwd.clone(), deadline, id)
     };
     let pspec = spec.player.clone().ok_or("no player")?;
-    let mut player = player::build(&pspec, &base)?;
+    // `share`: one session for every table of this run with the same key, one table at a
+    // time (the lock is held until this table ends).
+    let shared = match &spec.share {
+        Some(k) => Some(player::shared(
+            &format!("{}/{k}", row.run_id),
+            &pspec,
+            &base,
+        )?),
+        None => None,
+    };
+    let mut own_slot;
+    let mut guard_slot;
+    let player: &mut Box<dyn player::Player> = match &shared {
+        Some(s) => {
+            store.set_phase(id, "waiting_session", None)?;
+            guard_slot = s.lock().unwrap_or_else(|e| e.into_inner());
+            &mut guard_slot
+        }
+        None => {
+            own_slot = player::build(&pspec, &base)?;
+            &mut own_slot
+        }
+    };
     let sspec = spec.server.clone().unwrap_or_default();
     let mut server = Server {
         mode: sspec.mode,
@@ -559,7 +589,8 @@ fn run_inner(store: &Store, id: &str) -> Result<String, String> {
             .filter(|r| r.verdict != "fault")
             .map(|r| (r.ball.clone(), r.answer.clone()))
             .collect();
-        let restored = player.restore(&history, row.session.as_deref());
+        // A shared session holds other tables' turns too: never replay this table's history into it.
+        let restored = shared.is_none() && player.restore(&history, row.session.as_deref());
         if last.verdict == "point" {
             store.finish(
                 id,

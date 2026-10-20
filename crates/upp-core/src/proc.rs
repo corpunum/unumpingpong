@@ -102,6 +102,12 @@ pub fn run_cancellable(
     let mut cmd = Command::new(prog);
     cmd.args(args)
         .current_dir(cwd)
+        // Some tools (opencode) take their working directory from $PWD, not the process cwd:
+        // an inherited PWD sent an agent into the caller's directory (live 10-20).
+        .env(
+            "PWD",
+            std::path::absolute(cwd).unwrap_or_else(|_| cwd.to_path_buf()),
+        )
         .stdin(if stdin.is_some() {
             Stdio::piped()
         } else {
@@ -197,6 +203,10 @@ impl LiveProc {
         let mut cmd = Command::new(prog);
         cmd.args(args)
             .current_dir(cwd)
+            .env(
+                "PWD",
+                std::path::absolute(cwd).unwrap_or_else(|_| cwd.to_path_buf()),
+            )
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());

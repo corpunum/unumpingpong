@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 300" width="900" height="300" font-family="ui-sans-serif, -apple-system, Segoe UI, Helvetica, Arial, sans-serif">
+  <title>Many tables at once (parallel) and tables that hand their result to the next (serial chain)</title>
+  <style>
+    .h { font-size: 14px; font-weight: 800; letter-spacing: .1em; fill: #e8edf7; }
+    .l { font-size: 12px; fill: #93a1bd; }
+    .t { font-size: 12px; font-weight: 700; fill: #e8edf7; }
+    .ok { animation: ok 6s infinite; }
+    @keyframes ok { 0%,80% { opacity: 0 } 84%,98% { opacity: 1 } 100% { opacity: 0 } }
+    .lit { animation: lit 9s infinite; }
+    @keyframes lit { 0% { fill: #1c2540 } 8%,30% { fill: #30a46c } 34%,100% { fill: #1c2540 } }
+  </style>
+  <rect width="900" height="300" rx="18" fill="#0b1020"/>
+
+  <!-- PARALLEL: four small tables, balls out of phase -->
+  <text x="40" y="38" class="h">PARALLEL</text>
+  <text x="40" y="56" class="l">one ball per table · players never share files</text>
+  <defs><g id="mini">
+    <rect x="0" y="0" width="150" height="34" rx="4" fill="#0f6b45" stroke="#e8edf7" stroke-width="1.5"/>
+    <rect x="73" y="-6" width="4" height="46" fill="#e8edf7"/>
+  </g></defs>
+  <g transform="translate(40 76)"><use href="#mini"/><circle r="5" fill="#fff"><animateMotion dur="2.4s" repeatCount="indefinite" values="8,17; 75,6; 142,17; 75,28; 8,17"/></circle><text x="164" y="22" class="t">fix login bug</text></g>
+  <g transform="translate(40 126)"><use href="#mini"/><circle r="5" fill="#fff"><animateMotion dur="2.9s" repeatCount="indefinite" values="142,17; 75,28; 8,17; 75,6; 142,17"/></circle><text x="164" y="22" class="t">add CSV export</text></g>
+  <g transform="translate(40 176)"><use href="#mini"/><circle r="5" fill="#fff"><animateMotion dur="2.1s" repeatCount="indefinite" values="75,6; 142,17; 75,28; 8,17; 75,6"/></circle><text x="164" y="22" class="t">write the tests</text></g>
+  <g transform="translate(40 226)"><use href="#mini"/><circle r="5" fill="#fff"><animateMotion dur="3.3s" repeatCount="indefinite" values="8,17; 142,17; 8,17"/></circle><text x="164" y="22" class="t">update the docs</text></g>
+  <text x="300" y="98" class="t" style="fill:#6ee7a8"><tspan class="ok">✓ point</tspan></text>
+  <text x="300" y="198" class="t" style="fill:#6ee7a8"><tspan class="ok" style="animation-delay:2s">✓ point</tspan></text>
+
+  <!-- SERIAL: a point becomes the next table's ball -->
+  <text x="480" y="38" class="h">SERIAL</text>
+  <text x="480" y="56" class="l">a verified point serves the next table</text>
+  <g font-size="13" font-weight="700" fill="#e8edf7">
+    <rect class="lit" x="480" y="90" width="110" height="56" rx="12" fill="#1c2540"/>
+    <text x="535" y="123" text-anchor="middle">plan</text>
+    <rect class="lit" style="animation-delay:3s" x="625" y="90" width="110" height="56" rx="12" fill="#1c2540"/>
+    <text x="680" y="123" text-anchor="middle">build</text>
+    <rect class="lit" style="animation-delay:6s" x="770" y="90" width="110" height="56" rx="12" fill="#1c2540"/>
+    <text x="825" y="123" text-anchor="middle">test</text>
+  </g>
+  <path d="M590 118 h30 m-8 -6 l8 6 l-8 6" stroke="#93a1bd" stroke-width="2" fill="none"/>
+  <path d="M735 118 h30 m-8 -6 l8 6 l-8 6" stroke="#93a1bd" stroke-width="2" fill="none"/>
+  <text x="480" y="186" class="l">each step lights up only when its referee passed</text>
+  <text x="480" y="206" class="l">a failed step is returned to its player, never skipped</text>
+  <text x="480" y="246" class="t">You see one compact card per table,</text>
+  <text x="480" y="266" class="t">not thousands of lines of transcript.</text>
+</svg>
