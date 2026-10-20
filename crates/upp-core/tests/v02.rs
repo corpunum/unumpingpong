@@ -458,6 +458,31 @@ fn writer_children_of_a_worktree_table_get_their_own_worktree() {
     assert!(spec(2).cwd.is_some());
 }
 
+#[test]
+fn the_wall_lease_counts_time_used_before_a_resume() {
+    let d = tempfile::tempdir().unwrap();
+    let db = d.path().join("upp.db");
+    let store = Store::open(&db).unwrap();
+    let c = api::create_json(
+        &store,
+        json!({"name": "t", "ball": "b", "cwd": d.path(), "lease": {"wall_secs": 60},
+               "player": {"kind": "shell", "command": ["sh", fake("fake-coder.sh")]},
+               "referee": [{"kind": "command", "run": "grep -qx 42 answer.txt"}]}),
+    )
+    .unwrap();
+    let id = c["tables"][0]["id"].as_str().unwrap().to_string();
+    let run = c["run_id"].as_str().unwrap().to_string();
+    // An earlier run (before a crash) already used the whole minute.
+    store.set_wall_used_ms(&id, 60_000).unwrap();
+    let mut s = Scheduler::new(&db, 1, "test");
+    s.run = Some(run);
+    s.until_idle = true;
+    s.run().unwrap();
+    let t = store.table(&id).unwrap().unwrap();
+    assert_eq!(t.status, "expired", "{t:?}");
+    assert!(store.rallies(&id).unwrap().is_empty());
+}
+
 // ---------------------------------------------------------------- cancellation, effort
 
 #[test]

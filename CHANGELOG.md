@@ -13,6 +13,13 @@
   children share the parent's working directory; if a writer cannot be isolated, creating
   it is refused.
 
+- **Durable recovery.** Before each player call the table records the rally it started
+  and the git state it started from. If the scheduler dies mid-rally, `upp resume` never
+  replays it blind: the player is told what changed since it started (untracked files
+  included) and to continue from the current state (`recovered_inflight` event).
+- **The wall lease survives resumes.** Time used before a crash counts against the lease,
+  so a resumed table cannot run longer than its lease in total.
+
 ## v0.2.1 (2026-10-19) - Token carry for agent CLI players
 
 With Claude Code and Codex as players, v0.2.0's tables used 1.3-2.8x more tokens than one

@@ -210,9 +210,13 @@ const V2_TABLE_COLUMNS: &[(&str, &str, &str)] = &[
     ("rallies", "provenance_json", "TEXT"),
     // v0.2.1: cache reads apart from fresh input.
     ("rallies", "tokens_cached", "INTEGER NOT NULL DEFAULT 0"),
+    // v0.2.2: durable recovery. Wall time used across resumes, and the rally a player
+    // started but never recorded (with the git state it started from).
+    ("tables", "wall_used_ms", "INTEGER NOT NULL DEFAULT 0"),
+    ("tables", "inflight_json", "TEXT"),
 ];
 
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 
 const TABLE_COLS: &str = "id, run_id, name, goal, status, phase, player, after_id, created_ms, \
     started_ms, ended_ms, rallies, max_rallies, wall_secs, tokens, cost_usd, session, trail, \
@@ -865,6 +869,52 @@ impl Store {
             .execute(
                 "UPDATE tables SET worktree_json=?1 WHERE id=?2",
                 params![w.to_string(), id],
+            )
+            .map_err(e)?;
+        Ok(())
+    }
+
+    /// Wall time a table has used in earlier runs (it survives crashes and resumes).
+    pub fn wall_used_ms(&self, id: &str) -> R<u64> {
+        let ms: i64 = self
+            .conn
+            .query_row(
+                "SELECT wall_used_ms FROM tables WHERE id=?1",
+                params![id],
+                |r| r.get(0),
+            )
+            .map_err(e)?;
+        Ok(ms.max(0) as u64)
+    }
+
+    pub fn set_wall_used_ms(&self, id: &str, ms: u64) -> R<()> {
+        self.conn
+            .execute(
+                "UPDATE tables SET wall_used_ms=?1 WHERE id=?2",
+                params![ms as i64, id],
+            )
+            .map_err(e)?;
+        Ok(())
+    }
+
+    /// The rally a player started and has not finished yet (None when idle).
+    pub fn inflight(&self, id: &str) -> R<Option<Value>> {
+        let v: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT inflight_json FROM tables WHERE id=?1",
+                params![id],
+                |r| r.get(0),
+            )
+            .map_err(e)?;
+        Ok(v.and_then(|s| serde_json::from_str(&s).ok()))
+    }
+
+    pub fn set_inflight(&self, id: &str, v: Option<&Value>) -> R<()> {
+        self.conn
+            .execute(
+                "UPDATE tables SET inflight_json=?1 WHERE id=?2",
+                params![v.map(|v| v.to_string()), id],
             )
             .map_err(e)?;
         Ok(())
