@@ -257,7 +257,7 @@ Examples: [fix a failing test](examples/fix-failing-test.toml),
 | --- | --- | --- | --- | --- |
 | `shell` | any command | ball on stdin, answer on stdout; `UPP_RALLY`, `UPP_TABLE`, `UPP_SESSION`, `UPP_CWD` in env | none (brief repeated in returns) | **tested** (CI) |
 | `openai` | any OpenAI-compatible `/chat/completions` | conversation kept in memory; optional `X-Halogen-Keep`/`X-Halogen-From` | yes | **tested live** (Halogen, Qwen 3.8) |
-| `openunum` | OpenUnum HTTP API | `POST /api/chat {sessionId, message}`, polls `/api/chat/pending` | yes (one OpenUnum session per table) | API checked against OpenUnum source; not run live |
+| `openunum` | OpenUnum HTTP API | `POST /api/chat {sessionId, message}`, polls `/api/chat/pending` | yes (one OpenUnum session per table) | run live 2026-10-20 (2/2 points, parallel); no token counts yet |
 | `claude` | Claude Code | one `claude -p --input-format stream-json --output-format stream-json` process per table, a user message per rally (`persistent = false`: `claude -p --output-format json` per rally) | same process; `--resume <session_id>` after a restart or an effort change | **run live** (2.1.303, Haiku: cloud benchmark) |
 | `codex` | OpenAI Codex CLI | one `codex app-server` per table, a `turn/start` per rally on one thread (`persistent = false` or exec-only args: `codex exec --json ... -` per rally) | same thread; `thread/resume` / `exec resume <thread_id>` after a restart | **run live** (0.160.0, gpt-5.6-luna: cloud benchmark) |
 | `gemini` | Gemini CLI | `gemini -o json --session-id UUID -p BALL` | `--resume <UUID>` (per project dir) | flags verified (0.45.1); output and resume checked against its source; not run live |
