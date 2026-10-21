@@ -559,3 +559,159 @@ referee = [{{ kind = "command", run = "grep -qx 42 answer.txt" }}]
     );
     assert_eq!(t["rallies"].as_array().unwrap().len(), 1);
 }
+
+/// A git repo with one committed file `a.txt` = "base".
+fn git_repo(dir: &Path) -> PathBuf {
+    let repo = dir.join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    let g = |args: &[&str]| {
+        let o = Command::new("git")
+            .arg("-C")
+            .arg(&repo)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            o.status.success(),
+            "git {args:?}: {}",
+            String::from_utf8_lossy(&o.stderr)
+        );
+    };
+    g(&["init", "-q", "-b", "main"]);
+    std::fs::write(repo.join("a.txt"), "base\n").unwrap();
+    g(&["add", "a.txt"]);
+    g(&[
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@t",
+        "commit",
+        "-q",
+        "-m",
+        "base",
+    ]);
+    repo
+}
+
+/// Parent table in its own worktree whose player writes `parent_write` and opens one writer
+/// sub-table writing `kid_write`; returns (parent status, parent worktree path).
+fn merge_up_case(
+    d: &Path,
+    parent_write: &str,
+    kid_write: &str,
+    parent_referee: &str,
+) -> (Value, PathBuf) {
+    let repo = git_repo(d);
+    let db = d.join("upp.db");
+    let child = d.join("child.toml");
+    let kid_cmd = format!("cat >/dev/null; {kid_write}; echo done");
+    std::fs::write(
+        &child,
+        format!(
+            r#"
+[[table]]
+name = "kid"
+ball = "write"
+player = {{ kind = "shell", command = {} }}
+referee = [{{ kind = "command", run = "true" }}]
+"#,
+            serde_json::to_string(&vec!["sh", "-c", kid_cmd.as_str()]).unwrap()
+        ),
+    )
+    .unwrap();
+    let parent_cmd = format!(
+        "cat >/dev/null; {parent_write}; \"{bin}\" create {child} --parent \"$UPP_TABLE\" > /dev/null && echo delegated",
+        bin = env!("CARGO_BIN_EXE_upp"),
+        child = child.display()
+    );
+    let f = write_match(
+        d,
+        &format!(
+            r#"
+[[table]]
+name = "parent"
+ball = "delegate"
+worktree = {{ repo = "{repo}" }}
+lease = {{ max_rallies = 1 }}
+player = {{ kind = "shell", command = {cmd} }}
+referee = [{{ kind = "command", run = {referee} }}]
+"#,
+            repo = repo.display(),
+            cmd = serde_json::to_string(&vec!["sh", "-c", parent_cmd.as_str()]).unwrap(),
+            referee = serde_json::to_string(parent_referee).unwrap()
+        ),
+    );
+    let o = upp()
+        .arg("--db")
+        .arg(&db)
+        .args(["run", "--parallel", "1"])
+        .arg(&f)
+        .output()
+        .unwrap();
+    assert!(
+        !String::from_utf8_lossy(&o.stderr).contains("panicked"),
+        "{}",
+        String::from_utf8_lossy(&o.stderr)
+    );
+    let st = json_out(
+        upp()
+            .arg("--db")
+            .arg(&db)
+            .args(["status", "parent", "--full"]),
+    );
+    let wt = PathBuf::from(st["worktree"]["path"].as_str().unwrap_or_default());
+    (st, wt)
+}
+
+#[test]
+fn a_scored_writer_sub_table_merges_into_its_parent_worktree() {
+    let d = tempfile::tempdir().unwrap();
+    let (st, wt) = merge_up_case(
+        d.path(),
+        "echo parent > parent.txt",
+        "echo kid > kid.txt",
+        "test -f kid.txt && test -f parent.txt",
+    );
+    // The parent's referee saw the child's file in its own worktree: the merge came first.
+    assert_eq!(st["trail"], "*", "{st}");
+    assert_eq!(
+        std::fs::read_to_string(wt.join("kid.txt")).unwrap(),
+        "kid\n"
+    );
+    let log = Command::new("git")
+        .arg("-C")
+        .arg(&wt)
+        .args(["log", "--format=%s"])
+        .output()
+        .unwrap();
+    let log = String::from_utf8_lossy(&log.stdout);
+    assert!(log.contains("upp: merge kid"), "{log}");
+}
+
+#[test]
+fn a_merge_conflict_returns_the_ball_and_keeps_the_parent_files() {
+    let d = tempfile::tempdir().unwrap();
+    let (st, wt) = merge_up_case(d.path(), "echo parent > a.txt", "echo kid > a.txt", "true");
+    // The referee itself passes, but the merge check fails: no point.
+    assert_eq!(st["trail"], ".", "{st}");
+    assert!(
+        st.to_string()
+            .contains("merge conflict with sub-table 'kid'"),
+        "{st}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(wt.join("a.txt")).unwrap(),
+        "parent\n"
+    );
+    let s = Command::new("git")
+        .arg("-C")
+        .arg(&wt)
+        .args(["status", "--porcelain"])
+        .output()
+        .unwrap();
+    assert!(
+        s.stdout.is_empty(),
+        "the aborted merge leaves a clean tree: {}",
+        String::from_utf8_lossy(&s.stdout)
+    );
+}

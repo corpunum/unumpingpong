@@ -33,26 +33,56 @@ afterwards and the test was not touched.
 
 <img src="docs/media/results-repo.svg" alt="Benchmark chart: wall time and verified tasks per player, one agent session vs UnumPingPong tables" width="900">
 
-What we learned (mostly one run per cell: a first signal, not a law):
+What we learned (one run per cell unless noted: a first signal, not a law). Every result is one
+of three kinds, and we show all three:
 
-- **Open models gain the most from a referee.** On free NVIDIA NIM, `nemotron-3-ultra` went from
-  **1/10 alone to 10/10 at tables** and `gpt-oss-20b` from **0/10 to 7/10**; local **Qwen 3.6 35B**
-  went from 7/10 to **9/10**. The exact test failure, handed back to the same player, is what
-  turns "almost" into "done". (The same nemotron via opencode's free tier was the exception:
-  10/10 alone, 7/10 at tables.)
-- **Claude Haiku** (Claude Code): same 10/10 either way, but tables were **~8x faster and half the
-  cost**. One long Claude Code session drags every earlier task along; small tables stay focused.
-- **GPT Luna** (Codex CLI): tables reached **10/10 in every run**, the single session stopped early
-  (7/10, 6/10, 10/10), but tables cost 3-5x the tokens. Codex caches a long session cheaply, so
-  that session wins on cost and loses on reliability. A short player prompt cut the tables' cost
-  by **34%** at the same 10/10; sharing one session across tables did *not* help (it cost the most).
-  Luna inside the OpenUnum agent loop also went 10/10, fastest of all (105 s).
-- **Small local models** can call tools but not fix real bugs: SuperGemma 4 on a ROG Ally 1/10,
-  Gemma-4 E2B on a Galaxy S22 0/3.
+**✅ Solves as much or more, with fewer tokens**
 
-So the recommended setup depends on the player: parallel tables for Claude Code, open and
-local models; tables with a lean `system_prompt` for Codex when reliability matters. Full table:
+- **Claude Haiku** (Claude Code), two runs: 10/10 either way, tables used **~40% fewer tokens** and
+  were **3-8x faster** (one long session drags every earlier task along; small tables stay focused).
+- **Nemotron 3 Ultra** (free on NVIDIA NIM): 10/10 either way, tables used **28% fewer tokens**
+  (but took 29 vs 19 minutes).
+- **GPT Luna** in the **nanocode** harness: 10/10 either way, tables 7% fewer tokens and faster.
+
+**🟡 Solves more, at a higher token cost (better solutions)**
+
+- **GPT Luna** in the **Codex CLI**: one session 8/10, tables **10/10** in less time, for 50% more
+  tokens (215k -> 322k). The cheapest way we found to get 10/10 from Luna.
+- **local Qwen 3.6 35B** (OpenUnum): 7/10 -> **9/10**, but 4x the wall time on one local GPU.
+- **gpt-oss-20b** (free on NVIDIA NIM): **1/10 -> 6/10**, but at ~18x the tokens and 2.3 hours.
+
+**The harness matters as much as the model.** The same model (GPT Luna, low effort) at tables:
+Codex CLI 322k tokens, OpenUnum agent loop 738k, nanocode 1.7M, all 10/10. Measuring this also
+found a bug in OpenUnum: it never sent Codex a prompt-cache key; the fix cut its Luna tokens by
+55% (1.63M -> 738k).
+
+So the recommended setup depends on the player: tables for Claude Code and Codex, and for open
+models that cannot finish alone; a single session is fine for a strong model that already solves
+everything. Every number, including the superseded runs, is in
 [bench/repo/results.md](bench/repo/results.md).
+
+### Where it does not help (yet): ideas and contributions welcome
+
+We publish the misses too. If you have an idea for any of these, please
+[open an issue](https://github.com/corpunum/unumpingpong/issues) or a PR:
+
+- **Strong models that already solve everything alone** (Haiku, Nemotron, Luna in nanocode) gain
+  only tokens and time, not solved tasks; through opencode's free tier, Nemotron gained nothing
+  at all (10/10 both ways, same tokens, tables 2.7x slower). Can a cheaper first rally (e.g. a smaller model at
+  rally 1, the strong one only after a failure) make tables pay off here too?
+- **Weak models get expensive.** gpt-oss-20b solves 6/10 at tables, but each failed rally resends a
+  growing context: 3.1M tokens. Smarter return balls (only the failing assertion, a diff of what
+  changed) could cut that.
+- **Codex CLI tables cost more tokens** than one long Codex session (322k vs 215k): Codex caches a
+  long session cheaply and each table starts fresh. `share` (tables taking turns in one session)
+  was built for this; its earlier measurement was invalid (see below) and needs a re-run.
+- **Small on-device models** (SuperGemma 4 on a ROG Ally, Gemma-4 E2B on a phone) call tools but
+  did not fix these bugs; their runs predate the sandbox fix below and need a re-run.
+
+*A correction:* runs made before 2026-10-21 in our agent sandbox could not run the tests
+(`node_modules` was mounted read-only), which handicapped single sessions; v0.3.0 claims like
+"0/10 -> 7/10" came from that. Those runs are listed as superseded and every number above is
+from the fixed sandbox.
 
 The harness is in [bench/repo](bench/repo) (`python3 bench/repo/repo_bench.py --player …`);
 older synthetic task sets are in [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
@@ -102,7 +132,8 @@ upp list                           # who scored, who lost, why
 | **card** | the compact result of a rally: `done`, `evidence`, `open_issues`, `artifacts`, tokens |
 | **server** | who serves and reviews: the referee alone, a model, you, or a long-lived orchestrator over MCP |
 | **lease** | wall time, rallies, tokens, cost: a runaway guard, never the scheduler |
-| **share** | tables that take turns in one player session (an option; it did not pay off for Codex in our runs) |
+| **share** | tables that take turns in one player session (an option for Codex-style cached sessions; being re-measured) |
+| **merge-up** | a writer sub-table that scores is merged into its parent's worktree before the parent's referee runs; a conflict returns the ball |
 | **worktree** | each coding table gets its own git worktree; children that write get their own too |
 
 The engine is one Rust library with thin front-ends: CLI with a TUI (`upp`), daemon with an
@@ -119,6 +150,7 @@ HTTP/JSON API and Server-Sent Events (`uppd`, token-protected beyond localhost),
 | `claude` | Claude Code, one persistent stream-json process per table | run live |
 | `codex` | Codex `app-server`, one thread per table | run live |
 | `opencode` | `opencode run`, any provider/model (free tier, NVIDIA NIM, local) | run live |
+| nanocode | `shell` player + [nanocode-player.py](bench/repo/nanocode-player.py) (one session per table, continued per rally) | run live (bench) |
 | `openunum` | an OpenUnum agent session per table (our own framework) | run live |
 | `gemini` | Gemini CLI | flags verified |
 | `openai` | any OpenAI-compatible endpoint (llama.cpp, vLLM, Ollama, LM Studio, Halogen) | run live |

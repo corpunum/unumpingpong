@@ -226,6 +226,57 @@ pub fn commit_verified(repo: &Path, branch: &str, tree: &str, msg: &str) -> Resu
     Ok(c)
 }
 
+/// Merge one scored sub-table into its parent's worktree: commit the child's verified tree
+/// onto its branch, commit whatever the parent has not committed yet (so the merge never
+/// touches uncommitted work), then `merge --no-ff` the child branch. On a conflict the merge
+/// is aborted and the conflicting files are returned; the parent's files are as before.
+pub fn merge_up(parent_dir: &Path, parent_name: &str, child: &Scored) -> Result<Value, String> {
+    let top = toplevel(parent_dir)
+        .ok_or_else(|| format!("{} is not a git repository", parent_dir.display()))?;
+    let env = upp_ident();
+    let branch = child.worktree["branch"].as_str().unwrap_or_default();
+    let msg = format!("upp: {} ({}) verified point", child.name, child.table_id);
+    let child_commit = commit_verified(&top, branch, &child.tree, &msg)?;
+    if !g(&top, &["status", "--porcelain"])?.is_empty() {
+        g(&top, &["add", "-A"])?;
+        git(
+            &top,
+            &[
+                "commit",
+                "-q",
+                "--no-verify",
+                "-m",
+                &format!("upp: {parent_name} work before merging {}", child.name),
+            ],
+            &env,
+        )?;
+    }
+    let msg = format!(
+        "upp: merge {} ({}) into {parent_name}",
+        child.name, child.table_id
+    );
+    match git(
+        &top,
+        &["merge", "--no-ff", "-q", "--no-verify", "-m", &msg, branch],
+        &env,
+    ) {
+        Ok(_) => Ok(
+            json!({"table": child.name, "table_id": child.table_id, "branch": branch,
+                           "child_commit": child_commit, "merged": true,
+                           "commit": g(&top, &["rev-parse", "HEAD"])?}),
+        ),
+        Err(e) => {
+            let files = g(&top, &["diff", "--name-only", "--diff-filter=U"]).unwrap_or_default();
+            let _ = g(&top, &["merge", "--abort"]);
+            Ok(
+                json!({"table": child.name, "table_id": child.table_id, "branch": branch,
+                      "child_commit": child_commit, "merged": false,
+                      "conflict": files.lines().collect::<Vec<_>>(), "error": e}),
+            )
+        }
+    }
+}
+
 /// Branch names: `upp/<name>-<id>` with characters git accepts.
 pub fn branch_name(table_name: &str, id: &str) -> String {
     let clean: String = table_name

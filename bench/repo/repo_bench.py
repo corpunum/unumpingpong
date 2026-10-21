@@ -29,8 +29,9 @@ SPEC = json.load(open(os.path.join(HERE, "tasks.json")))
 TASKS = SPEC["tasks"]
 
 ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-ap.add_argument("--player", choices=["qwen", "haiku", "luna-low", "opencode", "luna-openunum"])
-ap.add_argument("--model", help="opencode: provider/model, e.g. opencode/nemotron-3-ultra-free or nim/openai/gpt-oss-20b")
+ap.add_argument("--player", choices=["qwen", "haiku", "luna-low", "opencode", "luna-openunum", "nanocode"])
+ap.add_argument("--model", help="opencode: provider/model, e.g. opencode/nemotron-3-ultra-free or nim/openai/gpt-oss-20b; "
+                "luna-low (Codex CLI) and nanocode: the model id (default gpt-5.6-luna for luna-low, gpt-6-luna for nanocode)")
 ap.add_argument("--label", help="results column for an opencode model (default: derived from --model)")
 ap.add_argument("--arm", default="a,b")
 ap.add_argument("--repo", default=SPEC["repo_dir_default"], help="local clone of the task repository")
@@ -51,6 +52,9 @@ if a.only:
 RESULTS = os.path.join(HERE, "results.json")
 OC_SANDBOX = os.path.join(HERE, "oc-sandbox.sh")
 CODEX_SANDBOX = os.path.join(HERE, "codex-sandbox.sh")
+NANOCODE_SANDBOX = os.path.join(HERE, "nanocode-sandbox.sh")
+CODEX_MODEL = a.model if a.player == "luna-low" and a.model else "gpt-5.6-luna"
+NANOCODE_MODEL = a.model if a.player == "nanocode" and a.model else "gpt-6-luna"
 NM = a.node_modules or os.path.join(a.repo, "node_modules")
 UPP = os.path.abspath(a.upp)
 KEY = a.label or (("oc:" + a.model.split("/", 1)[-1]) if a.player == "opencode" and a.model else a.player)
@@ -193,13 +197,17 @@ def player_toml():
         # Luna in OpenUnum's own agent loop: one OpenUnum worker per rally (openunum-luna-player.py).
         return ('{ kind = "shell", command = ["python3", ' + json.dumps(os.path.join(HERE, "openunum-luna-player.py"))
                 + '], timeout_secs = 1700 }')
+    if a.player == "nanocode":
+        # nanocode headless, one session per table continued across rallies (nanocode-player.py), sandboxed.
+        return ('{ kind = "shell", command = ["python3", ' + json.dumps(os.path.join(HERE, "nanocode-player.py"))
+                + '], timeout_secs = 1500 }')
     if a.player == "opencode":
         # --auto gives opencode every permission: run it in the podman sandbox (oc-sandbox.sh).
         return ('{ kind = "opencode", bin = ' + json.dumps(OC_SANDBOX) + ', model = ' + json.dumps(a.model)
                 + ', timeout_secs = 1500, args = ["--auto"] }')
     # Bypassed approvals inside the podman sandbox (codex's own bubblewrap sandbox cannot start here).
     sp = (', system_prompt = ' + json.dumps(a.system_prompt)) if a.system_prompt else ''
-    return ('{ kind = "codex", bin = ' + json.dumps(CODEX_SANDBOX) + ', model = "gpt-5.6-luna", persistent = true, lean = true, '
+    return ('{ kind = "codex", bin = ' + json.dumps(CODEX_SANDBOX) + ', model = ' + json.dumps(CODEX_MODEL) + ', persistent = true, lean = true, '
             'timeout_secs = 1500, args = ["--dangerously-bypass-approvals-and-sandbox"]' + sp + ' }')
 
 
@@ -226,14 +234,17 @@ def arm_a(root):
     else:
         if a.player == "opencode":
             argv = [OC_SANDBOX, "run", "--format", "json", "--auto", "--dir", root, "-m", a.model, prompt]
+        elif a.player == "nanocode":
+            argv = [NANOCODE_SANDBOX, "exec", "--no-subagents", "-m", NANOCODE_MODEL, "-t", "low", "-C", root, prompt]
+            os.environ["UPP_SANDBOX_HOME"] = os.path.join(root + ".nchome", "solo")
         elif a.player == "haiku":
             argv = ["claude", "-p", "--output-format", "json", "--model", "haiku", *LEAN_CLAUDE]
         else:
-            argv = [CODEX_SANDBOX, "exec", "--json", "--skip-git-repo-check", "-m", "gpt-5.6-luna",
+            argv = [CODEX_SANDBOX, "exec", "--json", "--skip-git-repo-check", "-m", CODEX_MODEL,
                     "--dangerously-bypass-approvals-and-sandbox", *codex_lean(), "-c", 'model_reasoning_effort="low"', "-"]
         try:
             # PWD too: opencode trusts $PWD over the process cwd (10-20: an agent wandered into $HOME).
-            r = subprocess.run(argv, input=None if a.player == "opencode" else prompt, cwd=root,
+            r = subprocess.run(argv, input=None if a.player in ("opencode", "nanocode") else prompt, cwd=root,
                                env={**os.environ, "PWD": root}, capture_output=True, text=True, timeout=a.a_timeout)
         except subprocess.TimeoutExpired as e:
             r = subprocess.CompletedProcess(argv, -9, e.stdout.decode() if isinstance(e.stdout, bytes) else (e.stdout or ""), "")
@@ -251,6 +262,8 @@ def arm_a(root):
                     cached += c.get("read", 0) or 0
                     pout += (tk.get("output", 0) or 0) + (tk.get("reasoning", 0) or 0)
                     cost = (cost or 0) + (v.get("part", {}).get("cost", 0) or 0)
+        elif a.player == "nanocode":
+            fin, cached, pout = nanocode_tokens(root + ".nchome")
         elif a.player == "haiku":
             try:
                 j = json.loads(r.stdout)
@@ -294,6 +307,8 @@ def arm_b(root, shared=False):
     match = os.path.join(root, "b.toml")
     open(match, "w").write("\n".join(lines))
     db = os.path.join(root, "b.db")
+    os.environ["UPP_NANOCODE_HOMES"] = root + ".nchome"
+    os.environ["UPP_NANOCODE_MODEL"] = NANOCODE_MODEL
     if shared:
         os.environ["UPP_SANDBOX_ROOT"] = root  # one process serves every task folder
     else:
@@ -307,6 +322,9 @@ def arm_b(root, shared=False):
     except Exception:  # noqa: BLE001
         pass
     billable = sum(r.get("tokens", 0) or 0 for r in rows)  # upp's billable count (fresh + out + 0.1 x cached)
+    if a.player == "nanocode":  # a shell player reports no tokens: read nanocode's own traces
+        fin, cached, pout = nanocode_tokens(root + ".nchome")
+        billable = round(fin + pout + 0.1 * cached)
     cost = sum(r.get("cost_usd", 0) or 0 for r in rows) or None
     rallies = sum(r.get("rallies", 0) or 0 for r in rows)
     stop_sandboxes(root)
@@ -315,6 +333,32 @@ def arm_b(root, shared=False):
     return result("C tables, one shared session" if shared else "B UnumPingPong tables", ok, wall, 0, 0, 0, cost, {"parallel": par, "rallies": rallies,
                                                                      "points_by_upp": sum(r.get("status") == "point" for r in rows)},
                   billable=billable)
+
+
+def nanocode_tokens(homes):
+    """(fresh input, cached input, output) summed over nanocode's OTLP trace files under `homes`:
+    every model-call span carries usage.input_tokens / output_tokens / cached_tokens."""
+    fin = cached = out = 0
+    for dirpath, _, files in os.walk(homes):
+        for f in files:
+            if f != "traces.jsonl":
+                continue
+            for line in open(os.path.join(dirpath, f), errors="replace"):
+                try:
+                    doc = json.loads(line)
+                except ValueError:
+                    continue
+                for rs in doc.get("resourceSpans", []):
+                    for ss in rs.get("scopeSpans", []):
+                        for sp in ss.get("spans", []):
+                            at = {x["key"]: int(x["value"].get("intValue", 0)) for x in sp.get("attributes", [])
+                                  if x["key"].startswith("usage.") and "intValue" in x.get("value", {})}
+                            if "usage.input_tokens" in at:
+                                c = at.get("usage.cached_tokens", 0)
+                                fin += at["usage.input_tokens"] - c
+                                cached += c
+                                out += at.get("usage.output_tokens", 0)
+    return fin, cached, out
 
 
 def result(arm, ok, wall, fin, cached, pout, cost, extra, billable=None):
@@ -356,7 +400,60 @@ def render(res):
             if c:
                 miss = [t for t, v in c["per_task"].items() if not v]
                 L.append(f"- {p} {k}: missed {', '.join(miss) if miss else 'none'}")
+    L += ["", "## Verdict per player", "",
+          "Each player's tables (B) against its own single session (A); players run only as tables are "
+          "compared with the named baseline. Tokens are billable tokens.", ""]
+    groups = {1: [], 2: [], 3: []}
+    for p, arms in res.get("players", {}).items():
+        b = arms.get("B")
+        base, base_name = arms.get("A"), p
+        if not base and p in VERDICT_BASELINE:
+            base_name = VERDICT_BASELINE[p]
+            base = res["players"].get(base_name, {}).get("A")
+        if not b or not base:
+            continue
+        cat, line = verdict(p, base, b, base_name)
+        groups[cat].append(line)
+    titles = {1: "Solves as much or more, with fewer tokens",
+              2: "Solves more, at a higher token cost (better solutions)",
+              3: "No gain or worse (harness or model specific)"}
+    for k in (1, 2, 3):
+        L += [f"### {titles[k]}", ""] + (groups[k] or ["- none"]) + [""]
+    if res.get("superseded"):
+        L += ["## Superseded runs", "",
+              "Kept for the record, left out of the verdicts above:", ""]
+        for p, arms in res["superseded"].items():
+            cells = ", ".join(f"{k} {c['points']}/{c['tasks']}" for k, c in arms.items() if isinstance(c, dict) and "points" in c)
+            L.append(f"- {p}: {cells}. {arms.get('why', '')}")
+        L.append("")
     open(os.path.join(HERE, "results.md"), "w").write("\n".join(L) + "\n")
+
+
+# Players that only ran as tables are compared with this single-session baseline.
+VERDICT_BASELINE = {k: "codex cli (gpt-6-luna low)" for k in (
+    "luna (OpenUnum agent loop)", "luna (OpenUnum agent loop) r2", "luna (OpenUnum agent loop) r3 cache-key")}
+# Why a player did not gain, when the data shows it.
+VERDICT_NOTES = {
+    "oc:nemotron-3-ultra-free": "already 10/10 alone; tables add rallies and time but no solved task",
+}
+
+
+def verdict(p, a, b, base_name):
+    """Category 1: B solves >= A with fewer tokens; 2: B solves more but costs more (or tokens
+    unknown); 3: no gain or worse."""
+    ds = b["points"] - a["points"]
+    ta, tb = a["tokens"]["billable"], b["tokens"]["billable"]
+    known = ta > 0 and tb > 0
+    vs = "" if base_name == p else f" (baseline: {base_name} A)"
+    tok = f"{ta:,} -> {tb:,} tokens ({(tb - ta) / ta:+.0%})" if known else "tokens not recorded"
+    line = f"- **{p}**{vs}: {a['points']}/{a['tasks']} -> {b['points']}/{b['tasks']}, {tok}, " \
+           f"{a['wall_s'] / 60:.1f} -> {b['wall_s'] / 60:.1f} min"
+    if ds >= 0 and known and tb < ta:
+        return 1, line
+    if ds > 0:
+        return 2, line
+    note = VERDICT_NOTES.get(p)
+    return 3, line + (f". {note}" if note else "")
 
 
 def main():

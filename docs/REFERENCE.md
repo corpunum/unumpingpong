@@ -139,6 +139,12 @@ and MCP server). It is off by default; the lean default stays lean.
   keeps 8 hits as `path:line: text` (paths relative to the cwd, lines cut at 200 characters,
   2 KB per query). The binary is `unumsearch` on PATH or `$UPP_UNUMSEARCH`; a failed search is a
   one-line note in the ball, never a failed table.
+- **Worktrees are searchable at once.** Every table worktree lives under
+  `<store dir>/worktrees/`. Make that directory an UnumSearch *split root*
+  (`split_roots = ["/path/to/store/worktrees"]` in its config): each worktree becomes its own
+  unit, a new one is noticed by the watcher and indexed incrementally within about a second,
+  and a removed one is dropped. Players using `search = "unumsearch"` then search their own
+  worktree through the index.
 
 ```toml
 [[table]]
@@ -263,6 +269,14 @@ the tables it served: `orchestrator_tokens` next to `player_tokens`.
   children share the parent's directory. The parent's rally waits for them (without
   holding a parallel slot) before its referee runs, and their final cards appear under
   `children` in the parent's card. Depth is capped by `max_depth` (default 3).
+- **Merge-up.** When the parent has its own worktree, every writer child that scores is merged
+  into it before the parent's referee runs (`merge_children`, default `true`): the child's
+  verified tree is committed on its branch, anything the parent has not committed yet is
+  committed first, then the child branch is merged with `--no-ff`. The parent's referee
+  therefore checks the combined work. A conflict aborts that merge (the parent's files stay
+  as they were) and fails the rally with a `merge sub-tables` check naming the files and the
+  branch, so the ball goes back to the parent to resolve it (`git merge <branch>`). Sub-tables
+  of sub-tables merge into their own parent the same way, level by level.
 - **Worktrees.** `worktree = { repo = "." }` (per table or in `[defaults]`) gives a table its
   own `git worktree` on branch `upp/<table>-<id>` under `<store dir>/worktrees/`. Players and the
   referee work there, isolated from each other and from your checkout. A point commits exactly
@@ -335,6 +349,7 @@ lease = { wall_secs = 600, max_rallies = 4, max_tokens = 200000, max_cost_usd = 
 card = true                # ask for a <card> block (default true)
 max_depth = 3              # deepest sub-table depth (default 3)
 worktree = { repo = "..", base = "main", branch = "upp/fix", path = "/tmp/wt/fix" }
+merge_children = true      # merge scored writer sub-tables into this worktree first (default true)
 unverified = false         # true only for a table with no referee checks (its point is marked UNVERIFIED)
 player = { kind = "claude", model = "sonnet", args = [], timeout_secs = 900, resume = true, env = {}, persistent = true, lean = true }
 # claude/codex also: tools = ["Read", "Edit"] ([] = none), system_prompt = "replaces the CLI's own"

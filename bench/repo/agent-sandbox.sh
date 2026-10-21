@@ -5,10 +5,11 @@
 # blocked where unprivileged user namespaces are restricted) could fence a full-permission
 # agent here (10-20: an agent left its task folder and checked out a commit into $HOME).
 #
-# Sees: the current directory (rw), node_modules symlink targets below it (ro), /usr (ro: node,
+# Sees: the current directory (rw), node_modules symlink targets below it (overlay: writes such as
+# vitest's node_modules/.vite-temp land in a throwaway layer; read-only broke every test run, 10-21), /usr (ro: node,
 # git, python), CA certificates (ro), and a private throwaway HOME holding a copy of that tool's
 # own config/auth only. Nothing else of the host.
-# Usage: agent-sandbox.sh <opencode|codex> <the tool's usual arguments...>
+# Usage: agent-sandbox.sh <opencode|codex|nanocode> <the tool's usual arguments...>
 # (The tool's whole binary directory is mounted: codex runs helper binaries that sit next to it.)
 set -eu
 TOOL=$1; shift
@@ -32,6 +33,14 @@ case "$TOOL" in
       cp -p "$HOME/.codex/auth.json" "$SB/.codex/"     # credentials stay inside this 0700 home
       cp -p "$HOME/.codex/config.toml" "$SB/.codex/" 2>/dev/null || true
     fi ;;
+  nanocode)
+    # nanocode (github.com/gakonst/nanocodex), built from source; it reads a Codex ChatGPT login
+    # from ~/.nanocode/auth.json (same format as ~/.codex/auth.json).
+    BIN=$(readlink -f "${NANOCODE_BIN:-$HOME/.local/opt/nanocode/nanocode}")
+    if [ ! -e "$SB/.nanocode/auth.json" ]; then
+      mkdir -p "$SB/.nanocode"; chmod 700 "$SB/.nanocode"
+      cp -p "$HOME/.codex/auth.json" "$SB/.nanocode/auth.json"
+    fi ;;
   *) echo "agent-sandbox: unsupported tool $TOOL" >&2; exit 2 ;;
 esac
 # node_modules symlinks in this folder or one level down (a solo run sees all task folders).
@@ -43,7 +52,7 @@ set -- --rm -i --userns=keep-id --network=host --label "upp-sandbox=${UPP_SANDBO
   -v "$(dirname "$BIN"):/opt/agentbin:ro" \
   -v "$SB:/home/sandbox" -e HOME=/home/sandbox -e CODEX_HOME=/home/sandbox/.codex \
   -v "$ROOT:$ROOT" -w "$CWD" -e PWD="$CWD" \
-  ${NM:+-v "$NM:$NM:ro"} \
+  ${NM:+-v "$NM:$NM:O"} \
   -e NVIDIA_API_KEY \
   docker.io/library/ubuntu:24.04 "/opt/agentbin/$(basename "$BIN")" "$@"
 exec podman run "$@"

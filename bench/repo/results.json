@@ -1,98 +1,5 @@
 {
  "players": {
-  "luna-low": {
-   "A": {
-    "arm": "A one agent session",
-    "points": 7,
-    "tasks": 10,
-    "per_task": {
-     "trading-metrics-401870f": true,
-     "tool-map-7681fe8": true,
-     "models-9151b9e": true,
-     "council-5f832b6": true,
-     "memory-e6d2f31": true,
-     "sessions-f25516b": false,
-     "scheduler-3b7a832": false,
-     "tools-4707051": true,
-     "intent-6bd97cf": false,
-     "core-d3bd2fe": true
-    },
-    "wall_s": 72.5,
-    "tokens": {
-     "fresh_in": 65096,
-     "cached_in": 929792,
-     "out": 7390,
-     "billable": 165465
-    },
-    "cost_usd": null,
-    "verified_per_hour": 347.36,
-    "timed_out": false,
-    "ran_at": "2026-10-20T17:42:51Z",
-    "model": null
-   },
-   "B": {
-    "arm": "B UnumPingPong tables",
-    "points": 10,
-    "tasks": 10,
-    "per_task": {
-     "trading-metrics-401870f": true,
-     "tool-map-7681fe8": true,
-     "models-9151b9e": true,
-     "council-5f832b6": true,
-     "memory-e6d2f31": true,
-     "sessions-f25516b": true,
-     "scheduler-3b7a832": true,
-     "tools-4707051": true,
-     "intent-6bd97cf": true,
-     "core-d3bd2fe": true
-    },
-    "wall_s": 173.0,
-    "tokens": {
-     "fresh_in": 0,
-     "cached_in": 0,
-     "out": 0,
-     "billable": 766817
-    },
-    "cost_usd": null,
-    "verified_per_hour": 208.09,
-    "parallel": 4,
-    "rallies": 10,
-    "points_by_upp": 10,
-    "ran_at": "2026-10-20T17:45:59Z",
-    "model": null
-   },
-   "C": {
-    "arm": "C tables, one shared session",
-    "points": 10,
-    "tasks": 10,
-    "per_task": {
-     "trading-metrics-401870f": true,
-     "tool-map-7681fe8": true,
-     "models-9151b9e": true,
-     "council-5f832b6": true,
-     "memory-e6d2f31": true,
-     "sessions-f25516b": true,
-     "scheduler-3b7a832": true,
-     "tools-4707051": true,
-     "intent-6bd97cf": true,
-     "core-d3bd2fe": true
-    },
-    "wall_s": 307.5,
-    "tokens": {
-     "fresh_in": 0,
-     "cached_in": 0,
-     "out": 0,
-     "billable": 1202867
-    },
-    "cost_usd": null,
-    "verified_per_hour": 117.09,
-    "parallel": 1,
-    "rallies": 10,
-    "points_by_upp": 10,
-    "ran_at": "2026-10-20T17:51:26Z",
-    "model": null
-   }
-  },
   "qwen": {
    "A": {
     "arm": "A one agent session",
@@ -213,6 +120,575 @@
     "ran_at": "2026-10-20T13:52:44Z"
    }
   },
+  "luna (OpenUnum agent loop)": {
+   "B": {
+    "arm": "B UnumPingPong tables",
+    "points": 10,
+    "tasks": 10,
+    "per_task": {
+     "trading-metrics-401870f": true,
+     "tool-map-7681fe8": true,
+     "models-9151b9e": true,
+     "council-5f832b6": true,
+     "memory-e6d2f31": true,
+     "sessions-f25516b": true,
+     "scheduler-3b7a832": true,
+     "tools-4707051": true,
+     "intent-6bd97cf": true,
+     "core-d3bd2fe": true
+    },
+    "wall_s": 105.1,
+    "tokens": {
+     "fresh_in": 0,
+     "cached_in": 0,
+     "out": 0,
+     "billable": 0
+    },
+    "cost_usd": null,
+    "verified_per_hour": 342.43,
+    "parallel": 4,
+    "rallies": 10,
+    "points_by_upp": 10,
+    "ran_at": "2026-10-20T18:38:40Z",
+    "model": null
+   }
+  },
+  "luna (OpenUnum agent loop) r2": {
+   "B": {
+    "arm": "B UnumPingPong tables",
+    "points": 9,
+    "tasks": 10,
+    "per_task": {
+     "trading-metrics-401870f": true,
+     "tool-map-7681fe8": true,
+     "models-9151b9e": true,
+     "council-5f832b6": true,
+     "memory-e6d2f31": true,
+     "sessions-f25516b": true,
+     "scheduler-3b7a832": true,
+     "tools-4707051": true,
+     "intent-6bd97cf": false,
+     "core-d3bd2fe": true
+    },
+    "wall_s": 131.5,
+    "tokens": {
+     "fresh_in": 1474860,
+     "cached_in": 1449984,
+     "output": 10780,
+     "billable": 1630638
+    },
+    "cost_usd": null,
+    "verified_per_hour": 246.41,
+    "parallel": 4,
+    "rallies": 12,
+    "points_by_upp": 9,
+    "ran_at": "2026-10-21T03:37:14Z",
+    "model": null,
+    "model_calls": 97
+   }
+  },
+  "haiku r2": {
+   "A": {
+    "arm": "A one agent session",
+    "points": 10,
+    "tasks": 10,
+    "per_task": {
+     "trading-metrics-401870f": true,
+     "tool-map-7681fe8": true,
+     "models-9151b9e": true,
+     "council-5f832b6": true,
+     "memory-e6d2f31": true,
+     "sessions-f25516b": true,
+     "scheduler-3b7a832": true,
+     "tools-4707051": true,
+     "intent-6bd97cf": true,
+     "core-d3bd2fe": true
+    },
+    "wall_s": 183.4,
+    "tokens": {
+     "fresh_in": 97091,
+     "cached_in": 2819299,
+     "out": 26698,
+     "billable": 405719
+    },
+    "cost_usd": 0.0791,
+    "verified_per_hour": 196.29,
+    "timed_out": false,
+    "ran_at": "2026-10-21T03:41:12Z",
+    "model": null
+   },
+   "B": {
+    "arm": "B UnumPingPong tables",
+    "points": 10,
+    "tasks": 10,
+    "per_task": {
+     "trading-metrics-401870f": true,
+     "tool-map-7681fe8": true,
+     "models-9151b9e": true,
+     "council-5f832b6": true,
+     "memory-e6d2f31": true,
+     "sessions-f25516b": true,
+     "scheduler-3b7a832": true,
+     "tools-4707051": true,
+     "intent-6bd97cf": true,
+     "core-d3bd2fe": true
+    },
+    "wall_s": 56.8,
+    "tokens": {
+     "fresh_in": 0,
+     "cached_in": 0,
+     "out": 0,
+     "billable": 249077
+    },
+    "cost_usd": 0.0502,
+    "verified_per_hour": 633.61,
+    "parallel": 4,
+    "rallies": 10,
+    "points_by_upp": 10,
+    "ran_at": "2026-10-21T03:42:23Z",
+    "model": null
+   }
+  },
+  "luna (OpenUnum agent loop) r3 cache-key": {
+   "B": {
+    "arm": "B UnumPingPong tables",
+    "points": 10,
+    "tasks": 10,
+    "per_task": {
+     "trading-metrics-401870f": true,
+     "tool-map-7681fe8": true,
+     "models-9151b9e": true,
+     "council-5f832b6": true,
+     "memory-e6d2f31": true,
+     "sessions-f25516b": true,
+     "scheduler-3b7a832": true,
+     "tools-4707051": true,
+     "intent-6bd97cf": true,
+     "core-d3bd2fe": true
+    },
+    "wall_s": 96.3,
+    "tokens": {
+     "fresh_in": 519538,
+     "cached_in": 2088704,
+     "output": 9367,
+     "billable": 737775
+    },
+    "cost_usd": null,
+    "verified_per_hour": 373.92,
+    "parallel": 4,
+    "rallies": 10,
+    "points_by_upp": 10,
+    "ran_at": "2026-10-21T03:54:33Z",
+    "model": null,
+    "model_calls": 88
+   }
+  },
+  "codex cli (gpt-6-luna low)": {
+   "A": {
+    "arm": "A one agent session",
+    "points": 8,
+    "tasks": 10,
+    "per_task": {
+     "trading-metrics-401870f": true,
+     "tool-map-7681fe8": true,
+     "models-9151b9e": true,
+     "council-5f832b6": true,
+     "memory-e6d2f31": true,
+     "sessions-f25516b": true,
+     "scheduler-3b7a832": false,
+     "tools-4707051": true,
+     "intent-6bd97cf": false,
+     "core-d3bd2fe": true
+    },
+    "wall_s": 128.5,
+    "tokens": {
+     "fresh_in": 74311,
+     "cached_in": 1312384,
+     "out": 9823,
+     "billable": 215372
+    },
+    "cost_usd": null,
+    "verified_per_hour": 224.2,
+    "timed_out": false,
+    "ran_at": "2026-10-21T05:14:56Z",
+    "model": null
+   },
+   "B": {
+    "arm": "B UnumPingPong tables",
+    "points": 10,
+    "tasks": 10,
+    "per_task": {
+     "trading-metrics-401870f": true,
+     "tool-map-7681fe8": true,
+     "models-9151b9e": true,
+     "council-5f832b6": true,
+     "memory-e6d2f31": true,
+     "sessions-f25516b": true,
+     "scheduler-3b7a832": true,
+     "tools-4707051": true,
+     "intent-6bd97cf": true,
+     "core-d3bd2fe": true
+    },
+    "wall_s": 56.8,
+    "tokens": {
+     "fresh_in": 0,
+     "cached_in": 0,
+     "out": 0,
+     "billable": 322173
+    },
+    "cost_usd": null,
+    "verified_per_hour": 633.6,
+    "parallel": 4,
+    "rallies": 10,
+    "points_by_upp": 10,
+    "ran_at": "2026-10-21T05:16:15Z",
+    "model": null
+   }
+  },
+  "nanocode (gpt-6-luna low)": {
+   "A": {
+    "arm": "A one agent session",
+    "points": 10,
+    "tasks": 10,
+    "per_task": {
+     "trading-metrics-401870f": true,
+     "tool-map-7681fe8": true,
+     "models-9151b9e": true,
+     "council-5f832b6": true,
+     "memory-e6d2f31": true,
+     "sessions-f25516b": true,
+     "scheduler-3b7a832": true,
+     "tools-4707051": true,
+     "intent-6bd97cf": true,
+     "core-d3bd2fe": true
+    },
+    "wall_s": 134.7,
+    "tokens": {
+     "fresh_in": 1828003,
+     "cached_in": 0,
+     "out": 13149,
+     "billable": 1841152
+    },
+    "cost_usd": null,
+    "verified_per_hour": 267.35,
+    "timed_out": false,
+    "ran_at": "2026-10-21T05:18:44Z",
+    "model": null
+   },
+   "B": {
+    "arm": "B UnumPingPong tables",
+    "points": 10,
+    "tasks": 10,
+    "per_task": {
+     "trading-metrics-401870f": true,
+     "tool-map-7681fe8": true,
+     "models-9151b9e": true,
+     "council-5f832b6": true,
+     "memory-e6d2f31": true,
+     "sessions-f25516b": true,
+     "scheduler-3b7a832": true,
+     "tools-4707051": true,
+     "intent-6bd97cf": true,
+     "core-d3bd2fe": true
+    },
+    "wall_s": 78.9,
+    "tokens": {
+     "fresh_in": 0,
+     "cached_in": 0,
+     "out": 0,
+     "billable": 1715708
+    },
+    "cost_usd": null,
+    "verified_per_hour": 456.01,
+    "parallel": 4,
+    "rallies": 11,
+    "points_by_upp": 10,
+    "ran_at": "2026-10-21T05:20:16Z",
+    "model": null
+   }
+  },
+  "oc:nvidia/nemotron-3-ultra-550b-a55b": {
+   "A": {
+    "arm": "A one agent session",
+    "points": 10,
+    "tasks": 10,
+    "per_task": {
+     "trading-metrics-401870f": true,
+     "tool-map-7681fe8": true,
+     "models-9151b9e": true,
+     "council-5f832b6": true,
+     "memory-e6d2f31": true,
+     "sessions-f25516b": true,
+     "scheduler-3b7a832": true,
+     "tools-4707051": true,
+     "intent-6bd97cf": true,
+     "core-d3bd2fe": true
+    },
+    "wall_s": 1147.8,
+    "tokens": {
+     "fresh_in": 1078322,
+     "cached_in": 9853920,
+     "out": 25378,
+     "billable": 2089092
+    },
+    "cost_usd": null,
+    "verified_per_hour": 31.37,
+    "timed_out": false,
+    "ran_at": "2026-10-21T05:39:38Z",
+    "model": "nim/nvidia/nemotron-3-ultra-550b-a55b"
+   },
+   "B": {
+    "arm": "B UnumPingPong tables",
+    "points": 10,
+    "tasks": 10,
+    "per_task": {
+     "trading-metrics-401870f": true,
+     "tool-map-7681fe8": true,
+     "models-9151b9e": true,
+     "council-5f832b6": true,
+     "memory-e6d2f31": true,
+     "sessions-f25516b": true,
+     "scheduler-3b7a832": true,
+     "tools-4707051": true,
+     "intent-6bd97cf": true,
+     "core-d3bd2fe": true
+    },
+    "wall_s": 1738.3,
+    "tokens": {
+     "fresh_in": 0,
+     "cached_in": 0,
+     "out": 0,
+     "billable": 1496904
+    },
+    "cost_usd": null,
+    "verified_per_hour": 20.71,
+    "parallel": 1,
+    "rallies": 11,
+    "points_by_upp": 10,
+    "ran_at": "2026-10-21T06:08:56Z",
+    "model": "nim/nvidia/nemotron-3-ultra-550b-a55b"
+   }
+  },
+  "oc:openai/gpt-oss-20b": {
+   "A": {
+    "arm": "A one agent session",
+    "points": 1,
+    "tasks": 10,
+    "per_task": {
+     "trading-metrics-401870f": true,
+     "tool-map-7681fe8": false,
+     "models-9151b9e": false,
+     "council-5f832b6": false,
+     "memory-e6d2f31": false,
+     "sessions-f25516b": false,
+     "scheduler-3b7a832": false,
+     "tools-4707051": false,
+     "intent-6bd97cf": false,
+     "core-d3bd2fe": false
+    },
+    "wall_s": 222.4,
+    "tokens": {
+     "fresh_in": 171475,
+     "cached_in": 0,
+     "out": 1141,
+     "billable": 172616
+    },
+    "cost_usd": null,
+    "verified_per_hour": 16.19,
+    "timed_out": false,
+    "ran_at": "2026-10-21T06:13:09Z",
+    "model": "nim/openai/gpt-oss-20b"
+   },
+   "B": {
+    "arm": "B UnumPingPong tables",
+    "points": 6,
+    "tasks": 10,
+    "per_task": {
+     "trading-metrics-401870f": true,
+     "tool-map-7681fe8": false,
+     "models-9151b9e": true,
+     "council-5f832b6": true,
+     "memory-e6d2f31": true,
+     "sessions-f25516b": true,
+     "scheduler-3b7a832": true,
+     "tools-4707051": false,
+     "intent-6bd97cf": false,
+     "core-d3bd2fe": false
+    },
+    "wall_s": 8446.9,
+    "tokens": {
+     "fresh_in": 0,
+     "cached_in": 0,
+     "out": 0,
+     "billable": 3095466
+    },
+    "cost_usd": null,
+    "verified_per_hour": 2.56,
+    "parallel": 1,
+    "rallies": 18,
+    "points_by_upp": 6,
+    "ran_at": "2026-10-21T08:34:32Z",
+    "model": "nim/openai/gpt-oss-20b"
+   }
+  },
+  "oc:nemotron-3-ultra-free": {
+   "A": {
+    "arm": "A one agent session",
+    "points": 10,
+    "tasks": 10,
+    "per_task": {
+     "trading-metrics-401870f": true,
+     "tool-map-7681fe8": true,
+     "models-9151b9e": true,
+     "council-5f832b6": true,
+     "memory-e6d2f31": true,
+     "sessions-f25516b": true,
+     "scheduler-3b7a832": true,
+     "tools-4707051": true,
+     "intent-6bd97cf": true,
+     "core-d3bd2fe": true
+    },
+    "wall_s": 407.5,
+    "tokens": {
+     "fresh_in": 869121,
+     "cached_in": 5395680,
+     "out": 14847,
+     "billable": 1423536
+    },
+    "cost_usd": null,
+    "verified_per_hour": 88.35,
+    "timed_out": false,
+    "ran_at": "2026-10-21T08:41:45Z",
+    "model": "opencode/nemotron-3-ultra-free"
+   },
+   "B": {
+    "arm": "B UnumPingPong tables",
+    "points": 10,
+    "tasks": 10,
+    "per_task": {
+     "trading-metrics-401870f": true,
+     "tool-map-7681fe8": true,
+     "models-9151b9e": true,
+     "council-5f832b6": true,
+     "memory-e6d2f31": true,
+     "sessions-f25516b": true,
+     "scheduler-3b7a832": true,
+     "tools-4707051": true,
+     "intent-6bd97cf": true,
+     "core-d3bd2fe": true
+    },
+    "wall_s": 1083.7,
+    "tokens": {
+     "fresh_in": 0,
+     "cached_in": 0,
+     "out": 0,
+     "billable": 1430334
+    },
+    "cost_usd": null,
+    "verified_per_hour": 33.22,
+    "parallel": 1,
+    "rallies": 10,
+    "points_by_upp": 10,
+    "ran_at": "2026-10-21T09:00:11Z",
+    "model": "opencode/nemotron-3-ultra-free"
+   }
+  }
+ },
+ "superseded": {
+  "luna-low": {
+   "A": {
+    "arm": "A one agent session",
+    "points": 7,
+    "tasks": 10,
+    "per_task": {
+     "trading-metrics-401870f": true,
+     "tool-map-7681fe8": true,
+     "models-9151b9e": true,
+     "council-5f832b6": true,
+     "memory-e6d2f31": true,
+     "sessions-f25516b": false,
+     "scheduler-3b7a832": false,
+     "tools-4707051": true,
+     "intent-6bd97cf": false,
+     "core-d3bd2fe": true
+    },
+    "wall_s": 72.5,
+    "tokens": {
+     "fresh_in": 65096,
+     "cached_in": 929792,
+     "out": 7390,
+     "billable": 165465
+    },
+    "cost_usd": null,
+    "verified_per_hour": 347.36,
+    "timed_out": false,
+    "ran_at": "2026-10-20T17:42:51Z",
+    "model": null
+   },
+   "B": {
+    "arm": "B UnumPingPong tables",
+    "points": 10,
+    "tasks": 10,
+    "per_task": {
+     "trading-metrics-401870f": true,
+     "tool-map-7681fe8": true,
+     "models-9151b9e": true,
+     "council-5f832b6": true,
+     "memory-e6d2f31": true,
+     "sessions-f25516b": true,
+     "scheduler-3b7a832": true,
+     "tools-4707051": true,
+     "intent-6bd97cf": true,
+     "core-d3bd2fe": true
+    },
+    "wall_s": 173.0,
+    "tokens": {
+     "fresh_in": 0,
+     "cached_in": 0,
+     "out": 0,
+     "billable": 766817
+    },
+    "cost_usd": null,
+    "verified_per_hour": 208.09,
+    "parallel": 4,
+    "rallies": 10,
+    "points_by_upp": 10,
+    "ran_at": "2026-10-20T17:45:59Z",
+    "model": null
+   },
+   "C": {
+    "arm": "C tables, one shared session",
+    "points": 10,
+    "tasks": 10,
+    "per_task": {
+     "trading-metrics-401870f": true,
+     "tool-map-7681fe8": true,
+     "models-9151b9e": true,
+     "council-5f832b6": true,
+     "memory-e6d2f31": true,
+     "sessions-f25516b": true,
+     "scheduler-3b7a832": true,
+     "tools-4707051": true,
+     "intent-6bd97cf": true,
+     "core-d3bd2fe": true
+    },
+    "wall_s": 307.5,
+    "tokens": {
+     "fresh_in": 0,
+     "cached_in": 0,
+     "out": 0,
+     "billable": 1202867
+    },
+    "cost_usd": null,
+    "verified_per_hour": 117.09,
+    "parallel": 1,
+    "rallies": 10,
+    "points_by_upp": 10,
+    "ran_at": "2026-10-20T17:51:26Z",
+    "model": null
+   },
+   "why": "ran in the agent sandbox while node_modules was read-only: the agent could not run vitest (EROFS), so arm A was handicapped; fixed 10-21 (overlay mount)"
+  },
   "oc:nemotron-3-ultra-free": {
    "A": {
     "arm": "A one agent session",
@@ -273,7 +749,8 @@
     "points_by_upp": 6,
     "ran_at": "2026-10-20T18:36:52Z",
     "model": "opencode/nemotron-3-ultra-free"
-   }
+   },
+   "why": "ran in the agent sandbox while node_modules was read-only: the agent could not run vitest (EROFS), so arm A was handicapped; fixed 10-21 (overlay mount)"
   },
   "supergemma4-q5 (ROG Ally)": {
    "A": {
@@ -335,7 +812,8 @@
     "points_by_upp": 1,
     "ran_at": "2026-10-20T17:53:30Z",
     "model": "ally/supergemma4-Q5_K_M"
-   }
+   },
+   "why": "ran in the agent sandbox while node_modules was read-only: the agent could not run vitest (EROFS), so arm A was handicapped; fixed 10-21 (overlay mount)"
   },
   "gemma-4-E2B (S22 phone)": {
    "A": {
@@ -383,7 +861,8 @@
     "points_by_upp": 0,
     "ran_at": "2026-10-20T19:07:55Z",
     "model": "s22/gemma-4-e2b"
-   }
+   },
+   "why": "ran in the agent sandbox while node_modules was read-only: the agent could not run vitest (EROFS), so arm A was handicapped; fixed 10-21 (overlay mount)"
   },
   "luna-low lean-prompt": {
    "B": {
@@ -416,40 +895,8 @@
     "points_by_upp": 10,
     "ran_at": "2026-10-20T18:07:56Z",
     "model": null
-   }
-  },
-  "luna (OpenUnum agent loop)": {
-   "B": {
-    "arm": "B UnumPingPong tables",
-    "points": 10,
-    "tasks": 10,
-    "per_task": {
-     "trading-metrics-401870f": true,
-     "tool-map-7681fe8": true,
-     "models-9151b9e": true,
-     "council-5f832b6": true,
-     "memory-e6d2f31": true,
-     "sessions-f25516b": true,
-     "scheduler-3b7a832": true,
-     "tools-4707051": true,
-     "intent-6bd97cf": true,
-     "core-d3bd2fe": true
-    },
-    "wall_s": 105.1,
-    "tokens": {
-     "fresh_in": 0,
-     "cached_in": 0,
-     "out": 0,
-     "billable": 0
-    },
-    "cost_usd": null,
-    "verified_per_hour": 342.43,
-    "parallel": 4,
-    "rallies": 10,
-    "points_by_upp": 10,
-    "ran_at": "2026-10-20T18:38:40Z",
-    "model": null
-   }
+   },
+   "why": "ran in the agent sandbox while node_modules was read-only: the agent could not run vitest (EROFS), so arm A was handicapped; fixed 10-21 (overlay mount)"
   },
   "oc:openai/gpt-oss-20b": {
    "A": {
@@ -511,7 +958,8 @@
     "points_by_upp": 6,
     "ran_at": "2026-10-20T20:17:02Z",
     "model": "nim/openai/gpt-oss-20b"
-   }
+   },
+   "why": "ran in the agent sandbox while node_modules was read-only: the agent could not run vitest (EROFS), so arm A was handicapped; fixed 10-21 (overlay mount)"
   },
   "oc:nvidia/nemotron-3-ultra-550b-a55b": {
    "A": {
@@ -573,7 +1021,197 @@
     "points_by_upp": 10,
     "ran_at": "2026-10-20T21:03:32Z",
     "model": "nim/nvidia/nemotron-3-ultra-550b-a55b"
-   }
+   },
+   "why": "ran in the agent sandbox while node_modules was read-only: the agent could not run vitest (EROFS), so arm A was handicapped; fixed 10-21 (overlay mount)"
+  },
+  "oc:nvidia/nemotron-3-ultra-550b-a55b r2": {
+   "A": {
+    "arm": "A one agent session",
+    "points": 1,
+    "tasks": 10,
+    "per_task": {
+     "trading-metrics-401870f": true,
+     "tool-map-7681fe8": false,
+     "models-9151b9e": false,
+     "council-5f832b6": false,
+     "memory-e6d2f31": false,
+     "sessions-f25516b": false,
+     "scheduler-3b7a832": false,
+     "tools-4707051": false,
+     "intent-6bd97cf": false,
+     "core-d3bd2fe": false
+    },
+    "wall_s": 1055.4,
+    "tokens": {
+     "fresh_in": 846446,
+     "cached_in": 5862240,
+     "out": 22771,
+     "billable": 1455441
+    },
+    "cost_usd": null,
+    "verified_per_hour": 3.41,
+    "timed_out": false,
+    "ran_at": "2026-10-21T04:00:38Z",
+    "model": "nim/nvidia/nemotron-3-ultra-550b-a55b"
+   },
+   "B": {
+    "arm": "B UnumPingPong tables",
+    "points": 10,
+    "tasks": 10,
+    "per_task": {
+     "trading-metrics-401870f": true,
+     "tool-map-7681fe8": true,
+     "models-9151b9e": true,
+     "council-5f832b6": true,
+     "memory-e6d2f31": true,
+     "sessions-f25516b": true,
+     "scheduler-3b7a832": true,
+     "tools-4707051": true,
+     "intent-6bd97cf": true,
+     "core-d3bd2fe": true
+    },
+    "wall_s": 4021.4,
+    "tokens": {
+     "fresh_in": 0,
+     "cached_in": 0,
+     "out": 0,
+     "billable": 3480046
+    },
+    "cost_usd": null,
+    "verified_per_hour": 8.95,
+    "parallel": 1,
+    "rallies": 14,
+    "points_by_upp": 10,
+    "ran_at": "2026-10-21T05:07:54Z",
+    "model": "nim/nvidia/nemotron-3-ultra-550b-a55b"
+   },
+   "why": "ran in the agent sandbox while node_modules was read-only: the agent could not run vitest (EROFS), so arm A was handicapped; fixed 10-21 (overlay mount)"
+  },
+  "nanocode (gpt-6-luna low)": {
+   "A": {
+    "arm": "A one agent session",
+    "points": 5,
+    "tasks": 10,
+    "per_task": {
+     "trading-metrics-401870f": true,
+     "tool-map-7681fe8": false,
+     "models-9151b9e": false,
+     "council-5f832b6": false,
+     "memory-e6d2f31": true,
+     "sessions-f25516b": false,
+     "scheduler-3b7a832": true,
+     "tools-4707051": true,
+     "intent-6bd97cf": false,
+     "core-d3bd2fe": true
+    },
+    "wall_s": 45.8,
+    "tokens": {
+     "fresh_in": 626286,
+     "cached_in": 0,
+     "out": 5293,
+     "billable": 631579
+    },
+    "cost_usd": null,
+    "verified_per_hour": 392.99,
+    "timed_out": false,
+    "ran_at": "2026-10-21T05:07:11Z",
+    "model": null
+   },
+   "B": {
+    "arm": "B UnumPingPong tables",
+    "points": 9,
+    "tasks": 10,
+    "per_task": {
+     "trading-metrics-401870f": true,
+     "tool-map-7681fe8": true,
+     "models-9151b9e": true,
+     "council-5f832b6": true,
+     "memory-e6d2f31": true,
+     "sessions-f25516b": true,
+     "scheduler-3b7a832": true,
+     "tools-4707051": true,
+     "intent-6bd97cf": false,
+     "core-d3bd2fe": true
+    },
+    "wall_s": 75.6,
+    "tokens": {
+     "fresh_in": 0,
+     "cached_in": 0,
+     "out": 0,
+     "billable": 2085374
+    },
+    "cost_usd": null,
+    "verified_per_hour": 428.51,
+    "parallel": 4,
+    "rallies": 15,
+    "points_by_upp": 9,
+    "ran_at": "2026-10-21T05:08:40Z",
+    "model": null
+   },
+   "why": "ran in the agent sandbox while node_modules was read-only: the agent could not run vitest (EROFS), so arm A was handicapped; fixed 10-21 (overlay mount)"
+  },
+  "codex cli (gpt-6-luna low)": {
+   "A": {
+    "arm": "A one agent session",
+    "points": 0,
+    "tasks": 10,
+    "per_task": {
+     "trading-metrics-401870f": false,
+     "tool-map-7681fe8": false,
+     "models-9151b9e": false,
+     "council-5f832b6": false,
+     "memory-e6d2f31": false,
+     "sessions-f25516b": false,
+     "scheduler-3b7a832": false,
+     "tools-4707051": false,
+     "intent-6bd97cf": false,
+     "core-d3bd2fe": false
+    },
+    "wall_s": 21.0,
+    "tokens": {
+     "fresh_in": 42394,
+     "cached_in": 96640,
+     "out": 1658,
+     "billable": 53716
+    },
+    "cost_usd": null,
+    "verified_per_hour": 0.0,
+    "timed_out": false,
+    "ran_at": "2026-10-21T05:09:15Z",
+    "model": null
+   },
+   "B": {
+    "arm": "B UnumPingPong tables",
+    "points": 10,
+    "tasks": 10,
+    "per_task": {
+     "trading-metrics-401870f": true,
+     "tool-map-7681fe8": true,
+     "models-9151b9e": true,
+     "council-5f832b6": true,
+     "memory-e6d2f31": true,
+     "sessions-f25516b": true,
+     "scheduler-3b7a832": true,
+     "tools-4707051": true,
+     "intent-6bd97cf": true,
+     "core-d3bd2fe": true
+    },
+    "wall_s": 76.7,
+    "tokens": {
+     "fresh_in": 0,
+     "cached_in": 0,
+     "out": 0,
+     "billable": 435807
+    },
+    "cost_usd": null,
+    "verified_per_hour": 469.51,
+    "parallel": 4,
+    "rallies": 11,
+    "points_by_upp": 10,
+    "ran_at": "2026-10-21T05:10:44Z",
+    "model": null
+   },
+   "why": "ran in the agent sandbox while node_modules was read-only: the agent could not run vitest (EROFS), so arm A was handicapped; fixed 10-21 (overlay mount)"
   }
  }
 }

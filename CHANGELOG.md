@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.4.0 (2026-10-21) - Merge-up, clean benchmark, harness comparison
+
+- **Merge-up of sub-tables.** A writer sub-table that scores is merged into its parent's
+  worktree before the parent's referee runs (`merge_children`, default true), so every level
+  of a nested run checks the combined work. A conflict is aborted cleanly and returns the
+  ball to the parent with the files and the branch to merge.
+- **Benchmark correction.** The agent sandbox mounted `node_modules` read-only, so sandboxed
+  agents (Codex CLI, opencode, nanocode) could not run the tests; single sessions were
+  handicapped and some v0.3.0 claims were wrong. Fixed with an overlay mount; every affected
+  player was re-run and the old runs are listed as superseded.
+- **Same model, three harnesses**: GPT Luna (low) in Codex CLI, nanocode and OpenUnum's agent
+  loop. Codex CLI tables are the cheapest 10/10. The comparison found a missing prompt-cache key
+  in OpenUnum (fixed there: -55% tokens).
+- Results now in three kinds: solves as much or more with fewer tokens; solves more at a higher
+  cost; no gain yet (with a "help wanted" section in the README).
+- Bench: `nanocode` player (built from source, sandboxed), `--model` for the Codex player,
+  token counts for the OpenUnum player from OpenUnum's own log (`openunum_tokens.py`).
+- Docs: table worktrees as an UnumSearch split root (new worktrees searchable within a second).
+
 ## v0.3.0 (2026-10-21) - Real-repository benchmark, shared sessions, sandboxed agents
 
 UnumPingPong was measured on 10 real bug fixes from a production repository, with nine

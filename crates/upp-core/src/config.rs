@@ -489,6 +489,10 @@ pub struct TableSpec {
     /// (chat models): they get the relevant code without tools. See also `{{search:...}}`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub context_search: Vec<String>,
+    /// When this table has its own worktree: merge each sub-table's verified point into it
+    /// before this table's referee runs (a conflict fails the rally). Default true.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merge_children: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
@@ -522,6 +526,9 @@ pub struct Defaults {
     /// Default for `share` (see TableSpec).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub share: Option<String>,
+    /// Default for `merge_children` (see TableSpec).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merge_children: Option<bool>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
@@ -666,6 +673,9 @@ impl MatchFile {
             }
             if t.effort.is_none() {
                 t.effort = d.effort.clone();
+            }
+            if t.merge_children.is_none() {
+                t.merge_children = d.merge_children;
             }
             if t.share.is_none() {
                 t.share = d.share.clone();

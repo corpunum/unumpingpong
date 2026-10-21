@@ -14,8 +14,19 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..", "..", "docs", "media", "results-repo.svg")
 res = json.load(open(os.path.join(HERE, "results.json")))["players"]
 
-NAMES = {"haiku": "Claude Haiku · Claude Code", "luna-low": "GPT Luna (low) · Codex CLI",
-         "qwen": "local Qwen 3.6 35B · OpenUnum"}
+# The chart shows one clean row per setup, in this order (repeat runs and superseded runs
+# stay in results.json and results.md).
+SHOW = [
+    ("haiku", "Claude Haiku · Claude Code"),
+    ("codex cli (gpt-6-luna low)", "GPT Luna (low) · Codex CLI"),
+    ("nanocode (gpt-6-luna low)", "GPT Luna (low) · nanocode"),
+    ("luna (OpenUnum agent loop) r3 cache-key", "GPT Luna (low) · OpenUnum agent loop"),
+    ("qwen", "local Qwen 3.6 35B · OpenUnum"),
+    ("oc:nvidia/nemotron-3-ultra-550b-a55b", "Nemotron 3 Ultra · NVIDIA NIM (free) · opencode"),
+    ("oc:nemotron-3-ultra-free", "Nemotron 3 Ultra · opencode free tier"),
+    ("oc:openai/gpt-oss-20b", "gpt-oss-20b · NVIDIA NIM (free) · opencode"),
+]
+NAMES = dict(SHOW)
 ARMS = [("A", "one agent, all tasks", "#7c8db5"), ("B", "UnumPingPong tables", "#30a46c"),
         ("C", "tables, shared session", "#3e63dd")]
 
@@ -40,7 +51,7 @@ def fmt_tokens(c):
 
 
 # Players with at least one complete arm; local-model runs with 0 tokens still show time.
-rows = [(k, v) for k, v in res.items() if any(a in v for a, _, _ in ARMS)]
+rows = [(k, res[k]) for k, _ in SHOW if k in res and any(a in res[k] for a, _, _ in ARMS)]
 W, X0, BAR_MAX = 900, 250, 290
 y = 96
 parts = []

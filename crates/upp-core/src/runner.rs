@@ -287,6 +287,89 @@ fn setup_worktree(
     Ok(path)
 }
 
+/// Merge the scored writer sub-tables in `ids` into this table's worktree (`dir`), in
+/// creation order. Returns a referee check: it fails on a conflict, with the conflicting
+/// files and the branch to merge by hand, so the ball goes back to this table. `None` when
+/// no sub-table had a verified point to merge.
+fn merge_children(
+    store: &Store,
+    id: &str,
+    dir: &Path,
+    name: &str,
+    ids: &[String],
+) -> Option<referee::CheckResult> {
+    let t0 = Instant::now();
+    let mut merged = Vec::new();
+    let mut conflicts = Vec::new();
+    for c in ids {
+        let Ok(Some(t)) = store.table(c) else {
+            continue;
+        };
+        let Some(w) = t.worktree.clone() else {
+            continue;
+        };
+        if t.status != "point" {
+            continue;
+        }
+        let tree = store.rallies(&t.id).ok().and_then(|rs| {
+            rs.iter()
+                .rev()
+                .find(|r| r.verdict == "point")
+                .and_then(|r| r.provenance["tree"].as_str().map(String::from))
+        });
+        let Some(tree) = tree else { continue };
+        let child = git::Scored {
+            table_id: t.id.clone(),
+            name: t.name.clone(),
+            worktree: w,
+            tree,
+        };
+        let res = git::merge_up(dir, name, &child).unwrap_or_else(
+            |e| json!({"table": t.name, "table_id": t.id, "merged": false, "error": e}),
+        );
+        let _ = store.event(id, "merge_child", res.clone());
+        if res["merged"] == true {
+            merged.push(res);
+        } else {
+            conflicts.push(res);
+        }
+    }
+    if merged.is_empty() && conflicts.is_empty() {
+        return None;
+    }
+    let summary = if conflicts.is_empty() {
+        format!(
+            "merged {} sub-table point(s) into this worktree",
+            merged.len()
+        )
+    } else {
+        let first = &conflicts[0];
+        format!(
+            "merge conflict with sub-table '{}' (files: {}): resolve it here with `git merge {}`",
+            first["table"].as_str().unwrap_or("?"),
+            first["conflict"]
+                .as_array()
+                .map(|a| a
+                    .iter()
+                    .filter_map(|x| x.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", "))
+                .unwrap_or_default(),
+            first["branch"].as_str().unwrap_or("?")
+        )
+    };
+    Some(referee::CheckResult {
+        name: "merge sub-tables".into(),
+        kind: "merge".into(),
+        pass: conflicts.is_empty(),
+        skipped: false,
+        summary,
+        output: serde_json::to_string_pretty(&json!({"merged": merged, "conflicts": conflicts}))
+            .unwrap_or_default(),
+        duration_ms: t0.elapsed().as_millis() as u64,
+    })
+}
+
 /// Block until every sub-table in `ids` has ended (the table's slot is free meanwhile),
 /// then return their final cards. A stop or the wall lease stops the wait.
 fn wait_children(
@@ -775,6 +858,13 @@ fn run_inner(store: &Store, id: &str) -> Result<String, String> {
             .filter(|c| !seen_children.contains(c))
             .collect();
         let children = wait_children(store, id, &new_children, deadline)?;
+        // Writer sub-tables work in their own worktrees: their verified points come home
+        // before this table's referee looks at the result.
+        let merged = if spec.worktree.is_some() && spec.merge_children.unwrap_or(true) {
+            merge_children(store, id, &cwd, &spec.name, &new_children)
+        } else {
+            None
+        };
         seen_children.extend(new_children);
 
         store.set_phase(id, "referee", None)?;
@@ -801,6 +891,10 @@ fn run_inner(store: &Store, id: &str) -> Result<String, String> {
         if let Some(a) = applied {
             verdict.passed = verdict.passed && a.pass;
             verdict.checks.insert(0, a);
+        }
+        if let Some(m) = merged {
+            verdict.passed = verdict.passed && m.pass;
+            verdict.checks.insert(0, m);
         }
         store.event(
             id,
