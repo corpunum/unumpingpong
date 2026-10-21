@@ -21,11 +21,16 @@ luna-low (Codex CLI, reasoning effort low). Standard library only, plus `upp`, g
     python3 bench/repo/repo_bench.py --player haiku --arm a,b
     python3 bench/repo/repo_bench.py --render          # rewrite results.md only
 """
-import argparse, json, os, shlex, shutil, subprocess, sys, time
+import argparse, json, os, re, shlex, shutil, subprocess, sys, time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
-SPEC = json.load(open(os.path.join(HERE, "tasks.json")))
+# --tasks picks the task set (default: the OpenUnum set next to this file; bench/open has the
+# public one). Results are written next to the task file.
+_ta = sys.argv.index("--tasks") + 1 if "--tasks" in sys.argv else 0
+TASKS_FILE = os.path.abspath(sys.argv[_ta]) if _ta else os.path.join(HERE, "tasks.json")
+SET_DIR = os.path.dirname(TASKS_FILE)
+SPEC = json.load(open(TASKS_FILE))
 TASKS = SPEC["tasks"]
 
 ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -34,7 +39,10 @@ ap.add_argument("--model", help="opencode: provider/model, e.g. opencode/nemotro
                 "luna-low (Codex CLI) and nanocode: the model id (default gpt-5.6-luna for luna-low, gpt-6-luna for nanocode)")
 ap.add_argument("--label", help="results column for an opencode model (default: derived from --model)")
 ap.add_argument("--arm", default="a,b")
-ap.add_argument("--repo", default=SPEC["repo_dir_default"], help="local clone of the task repository")
+ap.add_argument("--tasks", default=TASKS_FILE, help="task file (default: bench/repo/tasks.json; public set: bench/open/tasks.json)")
+ap.add_argument("--repo", default=SPEC.get("repo_dir_default"), help="local clone of the task repository (single-repo task sets)")
+ap.add_argument("--repos-dir", default=os.path.expanduser("~/.cache/upp-bench-repos"),
+                help="where tasks with a public `url` are cloned (once, partial clone)")
 ap.add_argument("--node-modules", default=None, help="node_modules to link into every checkout (default: <repo>/node_modules)")
 ap.add_argument("--work", default="/tmp/upp-repo-bench")
 ap.add_argument("--upp", default=os.path.join(ROOT, "target", "release", "upp"))
@@ -49,13 +57,13 @@ ap.add_argument("--render", action="store_true")
 a = ap.parse_args()
 if a.only:
     TASKS = [t for t in TASKS if t["id"] in a.only.split(",")]
-RESULTS = os.path.join(HERE, "results.json")
+RESULTS = os.path.join(SET_DIR, "results.json")
 OC_SANDBOX = os.path.join(HERE, "oc-sandbox.sh")
 CODEX_SANDBOX = os.path.join(HERE, "codex-sandbox.sh")
 NANOCODE_SANDBOX = os.path.join(HERE, "nanocode-sandbox.sh")
 CODEX_MODEL = a.model if a.player == "luna-low" and a.model else "gpt-5.6-luna"
 NANOCODE_MODEL = a.model if a.player == "nanocode" and a.model else "gpt-6-luna"
-NM = a.node_modules or os.path.join(a.repo, "node_modules")
+NM = a.node_modules or (os.path.join(a.repo, "node_modules") if a.repo else None)
 UPP = os.path.abspath(a.upp)
 KEY = a.label or (("oc:" + a.model.split("/", 1)[-1]) if a.player == "opencode" and a.model else a.player)
 if a.player == "opencode":
@@ -76,6 +84,22 @@ def sh(cmd, cwd=None, timeout=600):
 
 
 # ---------------------------------------------------------------- task checkouts and the referee
+def repo_of(t):
+    """Local clone for the task: its public `url` cloned under --repos-dir, else --repo."""
+    if not t.get("url"):
+        return a.repo
+    d = os.path.join(a.repos_dir, t["url"].rstrip("/").split("/")[-1])
+    if not os.path.isdir(d):
+        os.makedirs(a.repos_dir, exist_ok=True)
+        subprocess.run(["git", "clone", "-q", "--filter=blob:none", t["url"], d], check=True)
+    return d
+
+
+def test_cmd(t):
+    """The task's own test command (public set), else OpenUnum's vitest."""
+    return t.get("cmd") or f"npx vitest run {t['test']}"
+
+
 def setup(root):
     os.environ["UPP_SANDBOX_LABEL"] = root  # every sandbox container of this run carries it
     """One git worktree per task at the fix's parent, plus the fix's failing test (committed, so any
@@ -87,7 +111,7 @@ def setup(root):
         # A fresh repository from `git archive` of the parent: no history, so the fix commit (and
         # every later commit) cannot be looked up. A worktree would share the whole object store.
         os.makedirs(d)
-        arc = subprocess.run(["git", "-C", a.repo, "archive", t["base"]], capture_output=True)
+        arc = subprocess.run(["git", "-C", repo_of(t), "archive", t["base"]], capture_output=True)
         subprocess.run(["tar", "-x", "-C", d], input=arc.stdout, check=True)
         # Old checkouts predate OpenUnum's host guard (115ef1dc): a full unit-suite run there can
         # restart the REAL model server via `systemctl --user restart` (live 10-20: three Halogen
@@ -106,12 +130,13 @@ def setup(root):
         sh(["git", "init", "-q"], cwd=d)
         sh(["git", "add", "-A"], cwd=d)
         sh(["git", "-c", "user.name=bench", "-c", "user.email=bench@local", "commit", "-q", "-m", "base"], cwd=d)
-        src = sh(["git", "-C", a.repo, "show", f'{t["commit"]}:{t["test"]}']).stdout
+        src = sh(["git", "-C", repo_of(t), "show", f'{t["commit"]}:{t["test"]}']).stdout
         os.makedirs(os.path.dirname(os.path.join(d, t["test"])), exist_ok=True)
         open(os.path.join(d, t["test"]), "w").write(src)
         sh(["git", "add", t["test"]], cwd=d)
         sh(["git", "-c", "user.name=bench", "-c", "user.email=bench@local", "commit", "-q", "-m", "task: failing test"], cwd=d)
-        os.symlink(NM, os.path.join(d, "node_modules"))
+        if not t.get("cmd") and NM:
+            os.symlink(NM, os.path.join(d, "node_modules"))
         # The referee lives OUTSIDE the checkout: an agent can neither edit nor delete it
         # (10-20: a `git clean`/`stash -u` in a checkout removed an in-tree check.sh).
         chk = check_path(root, t)
@@ -119,7 +144,7 @@ def setup(root):
         open(chk, "w").write(
             "#!/bin/sh\n# referee: the task's test passes and is unchanged (run with cwd = the checkout)\n"
             f"git diff --quiet HEAD -- {t['test']} || {{ echo 'the test file was modified'; exit 1; }}\n"
-            f"exec timeout 300 npx vitest run {t['test']}\n")
+            f"exec timeout 300 sh -c {shlex.quote(test_cmd(t))}\n")
         os.chmod(chk, 0o755)
 
 
@@ -167,7 +192,7 @@ def statement(t, d=None):
             f'The unit test `{t["test"]}` describes the expected behaviour and currently fails. '
             "Find the cause in the source and fix it so the test passes. Do not edit or delete the test file. "
             "Run only this test file, never the whole suite. "
-            f'Check yourself with `npx vitest run {t["test"]}`.')
+            f'Check yourself with `{test_cmd(t)}`.')
 
 
 # ---------------------------------------------------------------- players
@@ -327,6 +352,12 @@ def arm_b(root, shared=False):
         billable = round(fin + pout + 0.1 * cached)
     cost = sum(r.get("cost_usd", 0) or 0 for r in rows) or None
     rallies = sum(r.get("rallies", 0) or 0 for r in rows)
+    # Keep the full record (every rally: ball, answer, referee output, tokens) next to the
+    # results, so anyone can audit a run without re-running it.
+    runs = os.path.join(SET_DIR, "runs")
+    os.makedirs(runs, exist_ok=True)
+    tag = re.sub(r"[^A-Za-z0-9._-]+", "_", KEY) + ("-C" if shared else "-B")
+    sh([UPP, "--db", db, "export", "-o", os.path.join(runs, f"{tag}.jsonl")])
     stop_sandboxes(root)
     ok = referee(root)
     teardown(root)
@@ -373,8 +404,10 @@ def result(arm, ok, wall, fin, cached, pout, cost, extra, billable=None):
 
 # ---------------------------------------------------------------- results
 def render(res):
-    L = ["# Real-repository benchmark", "",
-         f"{len(SPEC['tasks'])} real bug fixes from OpenUnum (`{SPEC['tasks'][0]['repo']}`, a private repository; the harness works on any repository): "
+    src = SPEC.get("source") or (f"OpenUnum (`{SPEC['tasks'][0]['repo']}`, a private repository; "
+                                 "the harness works on any repository)")
+    L = [SPEC.get("title", "# Real-repository benchmark"), "",
+         f"{len(SPEC['tasks'])} real bug fixes from {src}: "
          "each task is a fresh repository made from the fix's parent commit (`git archive`, no history, so the fix cannot be looked up) plus the fix's own unit test (which fails there). The player gets the "
          "issue title and the failing test, not the file to change. A task counts only if the test passes afterwards "
          "and the test file is unchanged. Tasks: [tasks.json](tasks.json). One run per cell.", "",
@@ -426,12 +459,12 @@ def render(res):
             cells = ", ".join(f"{k} {c['points']}/{c['tasks']}" for k, c in arms.items() if isinstance(c, dict) and "points" in c)
             L.append(f"- {p}: {cells}. {arms.get('why', '')}")
         L.append("")
-    open(os.path.join(HERE, "results.md"), "w").write("\n".join(L) + "\n")
+    open(os.path.join(SET_DIR, "results.md"), "w").write("\n".join(L) + "\n")
 
 
 # Players that only ran as tables are compared with this single-session baseline.
-VERDICT_BASELINE = {k: "codex cli (gpt-6-luna low)" for k in (
-    "luna (OpenUnum agent loop)", "luna (OpenUnum agent loop) r2", "luna (OpenUnum agent loop) r3 cache-key")}
+VERDICT_BASELINE = {"haiku r2": "haiku", **{k: "codex cli (gpt-6-luna low)" for k in (
+    "luna (OpenUnum agent loop)", "luna (OpenUnum agent loop) r2", "luna (OpenUnum agent loop) r3 cache-key")}}
 # Why a player did not gain, when the data shows it.
 VERDICT_NOTES = {
     "oc:nemotron-3-ultra-free": "already 10/10 alone; tables add rallies and time but no solved task",

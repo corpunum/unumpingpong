@@ -1,0 +1,172 @@
+{
+ "players": {
+  "haiku": {
+   "A": {
+    "arm": "A one agent session",
+    "points": 12,
+    "tasks": 12,
+    "per_task": {
+     "more-itertools-67fcf64": true,
+     "more-itertools-f89d7a3": true,
+     "more-itertools-def2dab": true,
+     "more-itertools-e426d25": true,
+     "more-itertools-752799b": true,
+     "tomlkit-18e7f98": true,
+     "tomlkit-229ee86": true,
+     "tomlkit-096148f": true,
+     "tomlkit-c07c0c1": true,
+     "tomlkit-8c30fc1": true,
+     "toolz-d2eba03": true,
+     "toolz-5a7e078": true
+    },
+    "wall_s": 257.7,
+    "tokens": {
+     "fresh_in": 75088,
+     "cached_in": 1974033,
+     "out": 32581,
+     "billable": 305072
+    },
+    "cost_usd": 0.051,
+    "verified_per_hour": 167.66,
+    "timed_out": false,
+    "ran_at": "2026-10-21T13:56:06Z",
+    "model": null
+   },
+   "B": {
+    "arm": "B UnumPingPong tables",
+    "points": 12,
+    "tasks": 12,
+    "per_task": {
+     "more-itertools-67fcf64": true,
+     "more-itertools-f89d7a3": true,
+     "more-itertools-def2dab": true,
+     "more-itertools-e426d25": true,
+     "more-itertools-752799b": true,
+     "tomlkit-18e7f98": true,
+     "tomlkit-229ee86": true,
+     "tomlkit-096148f": true,
+     "tomlkit-c07c0c1": true,
+     "tomlkit-8c30fc1": true,
+     "toolz-d2eba03": true,
+     "toolz-5a7e078": true
+    },
+    "wall_s": 301.2,
+    "tokens": {
+     "fresh_in": null,
+     "cached_in": null,
+     "out": null,
+     "billable": 320923
+    },
+    "cost_usd": 0.0483,
+    "verified_per_hour": 143.43,
+    "parallel": 4,
+    "rallies": 12,
+    "points_by_upp": 12,
+    "ran_at": "2026-10-21T15:33:52Z",
+    "model": null,
+    "note": "run 1; full record not kept (records start with run 2)"
+   }
+  },
+  "oc:nvidia/nemotron-3-ultra-550b-a55b": {
+   "A": {
+    "arm": "A one agent session",
+    "points": 10,
+    "tasks": 12,
+    "per_task": {
+     "more-itertools-67fcf64": true,
+     "more-itertools-f89d7a3": true,
+     "more-itertools-def2dab": true,
+     "more-itertools-e426d25": true,
+     "more-itertools-752799b": true,
+     "tomlkit-18e7f98": true,
+     "tomlkit-229ee86": true,
+     "tomlkit-096148f": true,
+     "tomlkit-c07c0c1": true,
+     "tomlkit-8c30fc1": true,
+     "toolz-d2eba03": false,
+     "toolz-5a7e078": false
+    },
+    "wall_s": 2491.1,
+    "tokens": {
+     "fresh_in": 1484681,
+     "cached_in": 7214400,
+     "out": 41642,
+     "billable": 2247763
+    },
+    "cost_usd": null,
+    "verified_per_hour": 14.45,
+    "timed_out": false,
+    "ran_at": "2026-10-21T14:43:29Z",
+    "model": "nim/nvidia/nemotron-3-ultra-550b-a55b"
+   },
+   "B": {
+    "arm": "B UnumPingPong tables",
+    "points": 12,
+    "tasks": 12,
+    "per_task": {
+     "more-itertools-67fcf64": true,
+     "more-itertools-f89d7a3": true,
+     "more-itertools-def2dab": true,
+     "more-itertools-e426d25": true,
+     "more-itertools-752799b": true,
+     "tomlkit-18e7f98": true,
+     "tomlkit-229ee86": true,
+     "tomlkit-096148f": true,
+     "tomlkit-c07c0c1": true,
+     "tomlkit-8c30fc1": true,
+     "toolz-d2eba03": true,
+     "toolz-5a7e078": true
+    },
+    "wall_s": 2659.6,
+    "tokens": {
+     "fresh_in": 0,
+     "cached_in": 0,
+     "out": 0,
+     "billable": 3831489
+    },
+    "cost_usd": null,
+    "verified_per_hour": 16.24,
+    "parallel": 1,
+    "rallies": 12,
+    "points_by_upp": 12,
+    "ran_at": "2026-10-21T15:28:39Z",
+    "model": "nim/nvidia/nemotron-3-ultra-550b-a55b"
+   }
+  },
+  "haiku r2": {
+   "B": {
+    "arm": "B UnumPingPong tables",
+    "points": 12,
+    "tasks": 12,
+    "per_task": {
+     "more-itertools-67fcf64": true,
+     "more-itertools-f89d7a3": true,
+     "more-itertools-def2dab": true,
+     "more-itertools-e426d25": true,
+     "more-itertools-752799b": true,
+     "tomlkit-18e7f98": true,
+     "tomlkit-229ee86": true,
+     "tomlkit-096148f": true,
+     "tomlkit-c07c0c1": true,
+     "tomlkit-8c30fc1": true,
+     "toolz-d2eba03": true,
+     "toolz-5a7e078": true
+    },
+    "wall_s": 235.0,
+    "tokens": {
+     "fresh_in": 0,
+     "cached_in": 0,
+     "out": 0,
+     "billable": 231663
+    },
+    "cost_usd": 0.0483,
+    "verified_per_hour": 183.85,
+    "parallel": 4,
+    "rallies": 12,
+    "points_by_upp": 12,
+    "ran_at": "2026-10-21T15:33:52Z",
+    "model": null
+   }
+  }
+ }
+}

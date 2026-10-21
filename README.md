@@ -84,6 +84,11 @@ We publish the misses too. If you have an idea for any of these, please
 "0/10 -> 7/10" came from that. Those runs are listed as superseded and every number above is
 from the fixed sandbox.
 
+**Run it yourself:** the bugs above come from a private repository, so there is also an
+[open benchmark](bench/open/README.md): 12 real bug fixes from public Python libraries
+(more-itertools, tomlkit, toolz), every rally published. First results: Claude Haiku 12/12 both
+ways; free NVIDIA NIM Nemotron 10/12 alone, **12/12 at tables**.
+
 The harness is in [bench/repo](bench/repo) (`python3 bench/repo/repo_bench.py --player …`);
 older synthetic task sets are in [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 

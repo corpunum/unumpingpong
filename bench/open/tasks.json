@@ -1,0 +1,127 @@
+{
+ "title": "# Open benchmark: real bug fixes from public repositories",
+ "source": "three public Python libraries ([more-itertools](https://github.com/more-itertools/more-itertools), [tomlkit](https://github.com/python-poetry/tomlkit), [toolz](https://github.com/pytoolz/toolz)); anyone can reproduce it",
+ "note": "Each task: a real fix commit whose own test fails on the parent and passes on the fix (verified by bench/open/mine.py). Tasks reference public commits; nothing is copied.",
+ "tasks": [
+  {
+   "id": "more-itertools-67fcf64",
+   "repo": "more-itertools/more-itertools",
+   "url": "https://github.com/more-itertools/more-itertools",
+   "base": "1ea82a711c69f590054987b5cb194157f8ce8ac4",
+   "commit": "67fcf640477c78605580f5ee703a54c73c1e7a8a",
+   "issue": "fix: honour a falsey validator in bucket (#1308)",
+   "test": "tests/test_more.py",
+   "cmd": "PYTHONPATH=src:. python3 -m pytest -q -p no:cacheprovider tests/test_more.py"
+  },
+  {
+   "id": "more-itertools-f89d7a3",
+   "repo": "more-itertools/more-itertools",
+   "url": "https://github.com/more-itertools/more-itertools",
+   "base": "790bb0bb2c03e7a07282e5f16f4b1fde35b8fcf5",
+   "commit": "f89d7a3331ba6b5421273e556c0a738e3dd1dd35",
+   "issue": "Issue 1304: make ichunked match chunked for n=0 and negative n",
+   "test": "tests/test_more.py",
+   "cmd": "PYTHONPATH=src:. python3 -m pytest -q -p no:cacheprovider tests/test_more.py"
+  },
+  {
+   "id": "more-itertools-def2dab",
+   "repo": "more-itertools/more-itertools",
+   "url": "https://github.com/more-itertools/more-itertools",
+   "base": "9ed3dbb0ae527230cd156d91d0af305478558fba",
+   "commit": "def2dabea858b6ecb84ee0c52e6e07929f2c409c",
+   "issue": "Fix one()/only() dropping a falsy user-supplied exception",
+   "test": "tests/test_more.py",
+   "cmd": "PYTHONPATH=src:. python3 -m pytest -q -p no:cacheprovider tests/test_more.py"
+  },
+  {
+   "id": "more-itertools-e426d25",
+   "repo": "more-itertools/more-itertools",
+   "url": "https://github.com/more-itertools/more-itertools",
+   "base": "9ed3dbb0ae527230cd156d91d0af305478558fba",
+   "commit": "e426d256b90bcef9aa4509ea345fca68ff21ae0c",
+   "issue": "Reuse input iterators in zip_broadcast",
+   "test": "tests/test_more.py",
+   "cmd": "PYTHONPATH=src:. python3 -m pytest -q -p no:cacheprovider tests/test_more.py"
+  },
+  {
+   "id": "more-itertools-752799b",
+   "repo": "more-itertools/more-itertools",
+   "url": "https://github.com/more-itertools/more-itertools",
+   "base": "9ed3dbb0ae527230cd156d91d0af305478558fba",
+   "commit": "752799b5c88e0823f1bd93e073edab0a6a7e5648",
+   "issue": "Preserve numeric_range values during reverse iteration",
+   "test": "tests/test_more.py",
+   "cmd": "PYTHONPATH=src:. python3 -m pytest -q -p no:cacheprovider tests/test_more.py"
+  },
+  {
+   "id": "tomlkit-18e7f98",
+   "repo": "python-poetry/tomlkit",
+   "url": "https://github.com/python-poetry/tomlkit",
+   "base": "19edc23b0244e1546abbf3b7890c3d8a0deeaf81",
+   "commit": "18e7f98252f18db5c973435453cd25e1c7bd4c61",
+   "issue": "Compare Bool items by value (#660)",
+   "test": "tests/test_items.py",
+   "cmd": "PYTHONPATH=src:. python3 -m pytest -q -p no:cacheprovider tests/test_items.py"
+  },
+  {
+   "id": "tomlkit-229ee86",
+   "repo": "python-poetry/tomlkit",
+   "url": "https://github.com/python-poetry/tomlkit",
+   "base": "096148f8947adbfbae7b36bce356a3da7fc1dbf1",
+   "commit": "229ee8660872df482a56c93c83b14ac98fedf864",
+   "issue": "fix: don't reject an out-of-order super-table extended by a dotted key (#565)",
+   "test": "tests/test_toml_document.py",
+   "cmd": "PYTHONPATH=src:. python3 -m pytest -q -p no:cacheprovider tests/test_toml_document.py"
+  },
+  {
+   "id": "tomlkit-096148f",
+   "repo": "python-poetry/tomlkit",
+   "url": "https://github.com/python-poetry/tomlkit",
+   "base": "5fe4329fee7943d2376104e5977f3e3baa6d6abd",
+   "commit": "096148f8947adbfbae7b36bce356a3da7fc1dbf1",
+   "issue": "escape or reject a bare carriage return in multiline strings (#539)",
+   "test": "tests/test_api.py",
+   "cmd": "PYTHONPATH=src:. python3 -m pytest -q -p no:cacheprovider tests/test_api.py"
+  },
+  {
+   "id": "tomlkit-c07c0c1",
+   "repo": "python-poetry/tomlkit",
+   "url": "https://github.com/python-poetry/tomlkit",
+   "base": "8c30fc17d91aee7469c0287e509300e78aa15227",
+   "commit": "c07c0c15c49a893bb8a4c9f63401822d31e08942",
+   "issue": "fix: report the right line and column for CRLF and mixed line endings (#642)",
+   "test": "tests/test_parser.py",
+   "cmd": "PYTHONPATH=src:. python3 -m pytest -q -p no:cacheprovider tests/test_parser.py"
+  },
+  {
+   "id": "tomlkit-8c30fc1",
+   "repo": "python-poetry/tomlkit",
+   "url": "https://github.com/python-poetry/tomlkit",
+   "base": "88aa4b1c1128587b8c8ee92d0db11db7bfbdc0ed",
+   "commit": "8c30fc17d91aee7469c0287e509300e78aa15227",
+   "issue": "Fix Array.__delitem__ corrupting rendered output on slice deletion (#599)",
+   "test": "tests/test_items.py",
+   "cmd": "PYTHONPATH=src:. python3 -m pytest -q -p no:cacheprovider tests/test_items.py"
+  },
+  {
+   "id": "toolz-d2eba03",
+   "repo": "pytoolz/toolz",
+   "url": "https://github.com/pytoolz/toolz",
+   "base": "55ce42dc3b6f786ed9d4e38633cc5cfe3622a526",
+   "commit": "d2eba0374a452c2b18fe188b04527e22bda3548c",
+   "issue": "Fix interpose([]) raising StopIteration (#635)",
+   "test": "toolz/tests/test_itertoolz.py",
+   "cmd": "PYTHONPATH=src:. python3 -m pytest -q -p no:cacheprovider toolz/tests/test_itertoolz.py"
+  },
+  {
+   "id": "toolz-5a7e078",
+   "repo": "pytoolz/toolz",
+   "url": "https://github.com/pytoolz/toolz",
+   "base": "1fb2b9f1b69ab664a264944f4eafc290acce127d",
+   "commit": "5a7e078c941c990dcaca53ac6920e5d5c0b1475f",
+   "issue": "Raise in partition_all when length is invalid (#603)",
+   "test": "toolz/tests/test_itertoolz.py",
+   "cmd": "PYTHONPATH=src:. python3 -m pytest -q -p no:cacheprovider toolz/tests/test_itertoolz.py"
+  }
+ ]
+}
