@@ -114,11 +114,24 @@ Examples: [fix a failing test](../examples/fix-failing-test.toml),
 | --- | --- | --- | --- | --- |
 | `shell` | any command | ball on stdin, answer on stdout; `UPP_RALLY`, `UPP_TABLE`, `UPP_SESSION`, `UPP_CWD` in env | none (brief repeated in returns) | **tested** (CI) |
 | `openai` | any OpenAI-compatible `/chat/completions` | conversation kept in memory; optional `X-Halogen-Keep`/`X-Halogen-From` | yes | **tested live** (Halogen, Qwen 3.8) |
-| `openunum` | OpenUnum HTTP API | `POST /api/chat {sessionId, message}`, polls `/api/chat/pending` | yes (one OpenUnum session per table) | run live 2026-10-20 (2/2 points, parallel); no token counts yet |
+| `openunum` | OpenUnum HTTP API | `POST /api/chat {sessionId, message}`, polls `/api/chat/pending` | yes (one OpenUnum session per table; session-tree mode: one OpenUnum worker per table, resumed per rally) | run live 2026-10-20 (2/2 points, parallel); no token counts yet |
 | `claude` | Claude Code | one `claude -p --input-format stream-json --output-format stream-json` process per table, a user message per rally (`persistent = false`: `claude -p --output-format json` per rally) | same process; `--resume <session_id>` after a restart or an effort change | **run live** (2.1.303, Haiku: cloud benchmark) |
 | `codex` | OpenAI Codex CLI | one `codex app-server` per table, a `turn/start` per rally on one thread (`persistent = false` or exec-only args: `codex exec --json ... -` per rally) | same thread; `thread/resume` / `exec resume <thread_id>` after a restart | **run live** (0.160.0, gpt-5.6-luna: cloud benchmark) |
 | `gemini` | Gemini CLI | `gemini -o json --session-id UUID -p BALL` | `--resume <UUID>` (per project dir) | flags verified (0.45.1); output and resume checked against its source; not run live |
 | `opencode` | opencode | `opencode run --format json MESSAGE` | `-s <sessionID>` | flags verified (1.18.33); event schema checked against its source; not run live |
+
+**OpenUnum session-tree mode.** With `parent_session = "<OpenUnum session id>"` (or
+`$UPP_OPENUNUM_PARENT`) the `openunum` player does not use a chat session of its own: rally 1
+spawns a worker under that session (`session_spawn`, `budget.refereeOwned = true`,
+`implementationWorktree` = the table's cwd, optional `model` / `thinking`), and every later ball
+resumes the SAME worker (`POST /api/sessions/:id/resume`, so its transcript and prompt cache are
+reused). The answer is the worker's result summary. OpenUnum's budgets, loop guards, memory and
+UI then apply to every table, and nested tables become a nested session tree. Needs an OpenUnum
+with the resume endpoint (2026-10-21 or later).
+
+```toml
+player = { kind = "openunum", parent_session = "chat:37ed1d6e-...", model = "luna", thinking = "low" }
+```
 
 ### Using UnumSearch from players
 

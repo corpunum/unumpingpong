@@ -21,7 +21,7 @@ SHOW = [
     ("codex cli (gpt-6-luna low)", "GPT Luna (low) · Codex CLI"),
     ("nanocode (gpt-6-luna low)", "GPT Luna (low) · nanocode"),
     ("luna (OpenUnum agent loop) r3 cache-key", "GPT Luna (low) · OpenUnum agent loop"),
-    ("qwen", "local Qwen 3.6 35B · OpenUnum"),
+    ("qwen", "local Qwen3.8 Flash Next · OpenUnum"),
     ("oc:nvidia/nemotron-3-ultra-550b-a55b", "Nemotron 3 Ultra · NVIDIA NIM (free) · opencode"),
     ("oc:nemotron-3-ultra-free", "Nemotron 3 Ultra · opencode free tier"),
     ("oc:openai/gpt-oss-20b", "gpt-oss-20b · NVIDIA NIM (free) · opencode"),

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **`openunum` player, session-tree mode** (`parent_session`, `model`, `thinking`): each table's
+  player is an OpenUnum worker under that session, spawned on rally 1 and resumed with every
+  later ball (`POST /api/sessions/:id/resume`), so OpenUnum's budgets, guards, memory and UI
+  apply. Live-verified 2026-10-21: one worker, point on rally 2 after a returned ball.
+- Benchmark label: the local model is Qwen3.8 Flash Next (it was mislabelled Qwen 3.6 35B).
+
 ## v0.4.0 (2026-10-21) - Merge-up, clean benchmark, harness comparison
 
 - **Merge-up of sub-tables.** A writer sub-table that scores is merged into its parent's

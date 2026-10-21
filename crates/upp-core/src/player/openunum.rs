@@ -27,6 +27,12 @@ pub struct OpenUnumPlayer {
     password: Option<String>,
     timeout_secs: Option<u64>,
     prefix: String,
+    /// Session-tree mode (see `PlayerSpec::Openunum::parent_session`).
+    parent: Option<String>,
+    model: Option<String>,
+    thinking: Option<String>,
+    /// Session-tree mode: the worker session this table plays in, after rally 1.
+    child: Option<String>,
     /// Delay between `/api/chat/pending` polls.
     pub poll: Duration,
 }
@@ -38,6 +44,9 @@ impl OpenUnumPlayer {
             password_env,
             timeout_secs,
             session_prefix,
+            parent_session,
+            model,
+            thinking,
         } = spec
         else {
             unreachable!("openunum player built from another spec")
@@ -47,6 +56,12 @@ impl OpenUnumPlayer {
             password: password_env.and_then(|v| std::env::var(v).ok()),
             timeout_secs,
             prefix: session_prefix.unwrap_or_else(|| "upp-".into()),
+            parent: parent_session
+                .or_else(|| std::env::var("UPP_OPENUNUM_PARENT").ok())
+                .filter(|s| !s.trim().is_empty()),
+            model,
+            thinking,
+            child: None,
             poll: Duration::from_millis(1500),
         }
     }
@@ -71,8 +86,140 @@ pub fn terminal_reply(v: &Value) -> Result<String, String> {
     }
 }
 
+impl OpenUnumPlayer {
+    /// Session-tree mode: rally 1 spawns a worker under the parent session
+    /// (`session_spawn`, the referee owns "done"); later rallies resume the SAME worker
+    /// (`POST /api/sessions/:id/resume`). The answer is the worker's result summary.
+    fn play_tree(&mut self, parent: &str, ball: &str, ctx: &PlayCtx) -> Result<Reply, String> {
+        let budget = ctx.budget(self.timeout_secs, 1800);
+        let until = Instant::now() + budget;
+        let wall_ms = budget.as_millis() as u64;
+        let agent = ureq::AgentBuilder::new()
+            .timeout(Duration::from_secs(120))
+            .build();
+        let with_pw = |r: ureq::Request| match &self.password {
+            Some(p) => r.set("X-OpenUnum-Password", p),
+            None => r,
+        };
+        let post = |path: &str, body: Value| -> Result<Value, String> {
+            match with_pw(agent.post(&format!("{}{path}", self.base_url))).send_json(body) {
+                Ok(r) => r
+                    .into_json()
+                    .map_err(|e| format!("OpenUnum {path}: bad JSON: {e}")),
+                Err(ureq::Error::Status(c, r)) => Err(format!(
+                    "OpenUnum {path} HTTP {c}: {}",
+                    crate::proc::head(&r.into_string().unwrap_or_default(), 600)
+                )),
+                Err(e) => Err(format!("OpenUnum {path}: {e}")),
+            }
+        };
+        let child = match self.child.clone() {
+            Some(c) => {
+                let v = post(
+                    &format!("/api/sessions/{}/resume", url_encode(&c)),
+                    json!({"message": ball, "wallTimeMs": wall_ms}),
+                )?;
+                if v["ok"].as_bool() != Some(true) {
+                    return Err(format!("OpenUnum resume of {c} refused: {v}"));
+                }
+                c
+            }
+            None => {
+                let thinking = self.thinking.clone().or_else(|| ctx.effort.clone());
+                let mut args = json!({
+                    "task": ball,
+                    "title": format!("upp: {}", ctx.table_id),
+                    "handoff": "UnumPingPong table: an external referee decides when this is done. \
+                                Reply with what you changed and how you checked it.",
+                    "implementationWorktree": ctx.cwd,
+                    "budget": {"wallTimeMs": wall_ms, "refereeOwned": true},
+                });
+                if let Some(m) = &self.model {
+                    args["model"] = json!(m);
+                }
+                if let Some(t) = thinking {
+                    args["thinking"] = json!(t);
+                }
+                let v = post(
+                    "/api/tool/run",
+                    json!({"name": "session_spawn", "sessionId": parent, "summarizeResult": false, "args": args}),
+                )?;
+                let r = if v.get("result").is_some() {
+                    &v["result"]
+                } else {
+                    &v
+                };
+                let id = r["sessionId"]
+                    .as_str()
+                    .or_else(|| r["childSessionId"].as_str())
+                    .ok_or_else(|| format!("OpenUnum session_spawn returned no session: {v}"))?
+                    .to_string();
+                self.child = Some(id.clone());
+                id
+            }
+        };
+        // Wait for the worker to end its turn; its result summary is the answer.
+        const TERMINAL: &[&str] = &["done", "failed", "timeout", "partial", "cancelled"];
+        let url = format!(
+            "{}/api/sessions/{}/tree?maxNodes=1",
+            self.base_url,
+            url_encode(&child)
+        );
+        while Instant::now() < until {
+            std::thread::sleep(self.poll);
+            if ctx.cancelled() {
+                let _ = post(
+                    "/api/tool/run",
+                    json!({"name": "session_cancel", "sessionId": parent, "args": {"sessionId": child}}),
+                );
+                return Err(format!("worker {child} cancelled (table stopped)"));
+            }
+            let Some(v) = with_pw(agent.get(&url))
+                .call()
+                .ok()
+                .and_then(|r| r.into_json::<Value>().ok())
+            else {
+                continue;
+            };
+            let nodes = v["tree"].as_array().or_else(|| v["nodes"].as_array());
+            let node = nodes.and_then(|n| {
+                n.iter()
+                    .find(|x| x["id"].as_str() == Some(child.as_str()))
+                    .or_else(|| n.first())
+            });
+            let Some(node) = node else { continue };
+            let status = node["status"].as_str().unwrap_or("");
+            if !TERMINAL.contains(&status) {
+                continue;
+            }
+            let summary = match &node["result_json"] {
+                Value::String(s) => serde_json::from_str::<Value>(s)
+                    .ok()
+                    .and_then(|j| j["summary"].as_str().map(String::from))
+                    .unwrap_or_else(|| s.clone()),
+                other => other["summary"].as_str().unwrap_or_default().to_string(),
+            };
+            if summary.trim().is_empty() {
+                return Err(format!("worker {child} ended ({status}) without a result"));
+            }
+            return Ok(Reply {
+                text: format!("[OpenUnum worker {child}: {status}]\n{summary}"),
+                session: Some(child),
+                ..Default::default()
+            });
+        }
+        Err(format!(
+            "worker {child} still running after {:.0}s",
+            budget.as_secs_f64()
+        ))
+    }
+}
+
 impl Player for OpenUnumPlayer {
     fn play(&mut self, ball: &str, ctx: &PlayCtx) -> Result<Reply, String> {
+        if let Some(parent) = self.parent.clone() {
+            return self.play_tree(&parent, ball, ctx);
+        }
         let session = format!("{}{}", self.prefix, ctx.session_key);
         let budget = ctx.budget(self.timeout_secs, 1800);
         let until = Instant::now() + budget;
@@ -270,6 +417,9 @@ mod tests {
             password_env: None,
             timeout_secs: Some(5),
             session_prefix: None,
+            parent_session: None,
+            model: None,
+            thinking: None,
         });
         p.poll = Duration::from_millis(20);
         p
@@ -376,6 +526,111 @@ mod tests {
         );
         let e = player(&f.url).play("b", &ctx()).unwrap_err();
         assert!(e.contains("timed out"), "{e}");
+    }
+
+    /// A scripted OpenUnum for session-tree mode: records "METHOD path body" per request.
+    fn tree_fake(log: Arc<Mutex<Vec<String>>>) -> String {
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        std::thread::spawn(move || {
+            let mut rally = 0u32;
+            let mut polls = 0u32;
+            for s in l.incoming() {
+                let Ok(mut s) = s else { break };
+                let mut r = BufReader::new(s.try_clone().unwrap());
+                let mut first = String::new();
+                if r.read_line(&mut first).is_err() {
+                    continue;
+                }
+                let mut len = 0usize;
+                loop {
+                    let mut h = String::new();
+                    r.read_line(&mut h).unwrap();
+                    if h.trim().is_empty() {
+                        break;
+                    }
+                    if let Some(v) = h.to_ascii_lowercase().strip_prefix("content-length:") {
+                        len = v.trim().parse().unwrap();
+                    }
+                }
+                let mut body = vec![0u8; len];
+                r.read_exact(&mut body).unwrap();
+                let path = first.split_whitespace().nth(1).unwrap_or("").to_string();
+                log.lock().unwrap().push(format!(
+                    "{} {} {}",
+                    &first[..first.find(' ').unwrap_or(0)],
+                    path,
+                    String::from_utf8_lossy(&body)
+                ));
+                let v = if path == "/api/tool/run" {
+                    rally += 1;
+                    polls = 0;
+                    json!({"ok": true, "result": {"sessionId": "w1", "status": "queued"}})
+                } else if path.starts_with("/api/sessions/w1/resume") {
+                    rally += 1;
+                    polls = 0;
+                    json!({"ok": true, "sessionId": "w1", "status": "queued"})
+                } else {
+                    polls += 1;
+                    let status = if polls < 2 { "running" } else { "done" };
+                    json!({"tree": [{"id": "w1", "status": status,
+                        "result_json": json!({"summary": format!("answer {rally}")}).to_string()}]})
+                };
+                let b = v.to_string();
+                let _ = write!(
+                    s,
+                    "HTTP/1.1 200 X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{b}",
+                    b.len()
+                );
+            }
+        });
+        url
+    }
+
+    #[test]
+    fn session_tree_mode_spawns_one_worker_and_resumes_it() {
+        let log = Arc::new(Mutex::new(Vec::new()));
+        let url = tree_fake(log.clone());
+        let mut p = OpenUnumPlayer::new(PlayerSpec::Openunum {
+            base_url: url,
+            password_env: None,
+            timeout_secs: Some(5),
+            session_prefix: None,
+            parent_session: Some("chat:parent".into()),
+            model: Some("luna".into()),
+            thinking: None,
+        });
+        p.poll = Duration::from_millis(20);
+        let a = p.play("ball 1", &ctx()).unwrap();
+        assert!(a.text.contains("answer 1"), "{}", a.text);
+        assert_eq!(a.session.as_deref(), Some("w1"));
+        let b = p.play("ball 2: the test still fails", &ctx()).unwrap();
+        assert!(b.text.contains("answer 2"), "{}", b.text);
+        let log = log.lock().unwrap();
+        let spawn = log
+            .iter()
+            .find(|l| l.starts_with("POST /api/tool/run"))
+            .unwrap();
+        assert!(
+            spawn.contains("\"session_spawn\"")
+                && spawn.contains("chat:parent")
+                && spawn.contains("\"refereeOwned\":true")
+                && spawn.contains("\"luna\""),
+            "{spawn}"
+        );
+        assert_eq!(
+            log.iter()
+                .filter(|l| l.starts_with("POST /api/tool/run"))
+                .count(),
+            1,
+            "one worker per table"
+        );
+        assert!(
+            log.iter()
+                .any(|l| l.starts_with("POST /api/sessions/w1/resume")
+                    && l.contains("the test still fails")),
+            "{log:?}"
+        );
     }
 
     #[test]

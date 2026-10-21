@@ -261,6 +261,16 @@ pub enum PlayerSpec {
         timeout_secs: Option<u64>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         session_prefix: Option<String>,
+        /// Session-tree mode: each table's player is a worker (sub-session) of this OpenUnum
+        /// session, spawned on rally 1 and resumed with every later ball, so OpenUnum's
+        /// budgets, guards, memory and UI apply. `$UPP_OPENUNUM_PARENT` sets it too.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parent_session: Option<String>,
+        /// Session-tree mode: the worker's model (e.g. "luna") and thinking level.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        model: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        thinking: Option<String>,
     },
     Claude(AgentCli),
     Codex(AgentCli),

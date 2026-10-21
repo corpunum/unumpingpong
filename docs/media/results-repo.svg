@@ -35,7 +35,7 @@
   <text x="40" y="435" class="a">B · UnumPingPong tables</text>
   <rect x="250" y="422" width="290" height="18" rx="4" fill="#30a46c"><animate attributeName="width" from="0" to="290" dur="1.2s" begin="0.2s" fill="freeze"/></rect>
   <text x="550" y="435" class="v" style="fill:#e8edf7">1.6 min · 10/10 ✓ · 738k tokens</text>
-  <text x="40" y="484" class="p">local Qwen 3.6 35B · OpenUnum</text>
+  <text x="40" y="484" class="p">local Qwen3.8 Flash Next · OpenUnum</text>
   <text x="40" y="509" class="a">A · one agent, all tasks</text>
   <rect x="250" y="496" width="71" height="18" rx="4" fill="#7c8db5"><animate attributeName="width" from="0" to="71" dur="1.2s" begin="0.2s" fill="freeze"/></rect>
   <text x="331" y="509" class="v" style="fill:#ffb4b6">25.0 min · 7/10 ✓</text>

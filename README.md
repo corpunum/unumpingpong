@@ -48,7 +48,7 @@ of three kinds, and we show all three:
 
 - **GPT Luna** in the **Codex CLI**: one session 8/10, tables **10/10** in less time, for 50% more
   tokens (215k -> 322k). The cheapest way we found to get 10/10 from Luna.
-- **local Qwen 3.6 35B** (OpenUnum): 7/10 -> **9/10**, but 4x the wall time on one local GPU.
+- **local Qwen3.8 Flash Next** (OpenUnum): 7/10 -> **9/10**, but 4x the wall time on one local GPU.
 - **gpt-oss-20b** (free on NVIDIA NIM): **1/10 -> 6/10**, but at ~18x the tokens and 2.3 hours.
 
 **The harness matters as much as the model.** The same model (GPT Luna, low effort) at tables:
