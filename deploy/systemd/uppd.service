@@ -1,0 +1,34 @@
+# systemd USER unit for the UnumPingPong daemon with the OpenUnum-compatible API and
+# auto-merge. Committed, NOT installed. To install by hand:
+#   mkdir -p ~/.config/systemd/user ~/.config/uppd
+#   cp deploy/systemd/uppd.service ~/.config/systemd/user/
+#   $EDITOR ~/.config/uppd/env        # optional: UPPD_COMPAT_PLAYER, UPPD_TOKEN
+#   systemctl --user daemon-reload && systemctl --user enable --now uppd
+#
+# Routes served: the native /api/tables/... plus /api/pingpong/tables/... (same paths and
+# shapes OpenUnum's pingpong_create / pingpong_answer / pingpong_tables tools call).
+# Auto-merge runs inside this process, per table, when the table spec has `auto_merge`
+# (target repo clean, fast-forward or conflict-free rebase, test command, plain push);
+# every decision is a row in the `merge_log` table of the database below. No timer is
+# needed: merging happens when a table scores.
+[Unit]
+Description=UnumPingPong daemon (orchestrator <-> worker tables, referee, auto-merge)
+After=network.target
+
+[Service]
+Type=simple
+# Default player for tables created through /api/pingpong/tables, as a player-spec JSON,
+# e.g. UPPD_COMPAT_PLAYER={"kind":"openunum"} (see docs/REFERENCE.md). Optional.
+EnvironmentFile=-%h/.config/uppd/env
+ExecStart=%h/.local/bin/uppd --listen 127.0.0.1:7878 --db %h/.local/share/unumpingpong/upp.db --parallel 4
+Restart=on-failure
+RestartSec=10
+Environment=PATH=%h/.local/bin:%h/.cargo/bin:/usr/local/bin:/usr/bin:/bin
+# Referee, test and player commands run as this user; keep the service itself tidy.
+NoNewPrivileges=true
+PrivateTmp=false
+ProtectSystem=full
+KillMode=control-group
+
+[Install]
+WantedBy=default.target

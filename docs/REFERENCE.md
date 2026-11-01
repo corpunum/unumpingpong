@@ -363,6 +363,7 @@ card = true                # ask for a <card> block (default true)
 max_depth = 3              # deepest sub-table depth (default 3)
 worktree = { repo = "..", base = "main", branch = "upp/fix", path = "/tmp/wt/fix" }
 merge_children = true      # merge scored writer sub-tables into this worktree first (default true)
+auto_merge = { repo = "..", target = "main", test = "cargo test", push = true, remote = "origin" }  # see Auto-merge
 unverified = false         # true only for a table with no referee checks (its point is marked UNVERIFIED)
 player = { kind = "claude", model = "sonnet", args = [], timeout_secs = 900, resume = true, env = {}, persistent = true, lean = true }
 # claude/codex also: tools = ["Read", "Edit"] ([] = none), system_prompt = "replaces the CLI's own"
@@ -500,3 +501,44 @@ Honest positioning, not a feature war:
 ## License
 
 Apache-2.0. See [LICENSE](../LICENSE).
+
+
+## Auto-merge
+
+A table with `auto_merge` lands its verified point on a target branch when it scores. `test` is
+required; `repo` defaults to the table's worktree repository, `source` to the worktree branch,
+`target` to `main`, `push` to true, `remote` to `origin`, `test_timeout_secs` to 1800. The rules are
+fixed, not options:
+
+1. The referee must have passed on the scoring rally (an unverified point never merges).
+2. The target repository must be clean (no tracked or untracked changes, no merge or rebase in
+   progress) with the target branch checked out. Otherwise: `skipped_dirty` / `skipped_wrong_branch`.
+3. Fast-forward, or a conflict-free rebase of the source onto the target (in a scratch worktree, then
+   fast-forwarded in). No merge commits, no conflict resolution: a conflict is `skipped_conflict`.
+4. The `test` command runs in the repository after the merge. If it fails the target branch is reset
+   to where it was (`skipped_tests_failed`).
+5. Only then a plain `git push` (never forced); a refused push resets the target too
+   (`skipped_push_failed`). No such remote: merged locally, noted in the reason.
+
+Every decision (`merged_ff`, `merged_rebase`, `already_merged`, `skipped_*`) is a row in the SQLite
+`merge_log` table with its reason and details, an `auto_merge` event, and appears as `mergeLog` in
+`GET /api/pingpong/tables/{id}`.
+
+## OpenUnum-compatible API
+
+`uppd` also serves the routes OpenUnum's `pingpong_create`, `pingpong_answer` and `pingpong_tables`
+MCP tools call, with the same paths and shapes (`src/server/routes/pingpong.mjs` in OpenUnum):
+
+| Route | Result |
+|---|---|
+| `GET /api/pingpong/tables[?status=&limit=]` | `{ok, tables}` |
+| `POST /api/pingpong/tables` | `201 {ok, table}`; `400 {error:"invalid_payload", details:[{field,issue}]}` |
+| `GET /api/pingpong/tables/{id}` | `{ok, table}` with `ball`, `rallies`, `mergeLog`; `404 table_not_found` |
+| `POST /api/pingpong/tables/{id}/answer` | `{ok, table}`; `409 not_waiting_for_server` |
+| `POST /api/pingpong/tables/{id}/stop` | `{ok, table}`; `409 table_not_active` |
+
+Differences: tables run with the daemon's default player (`--compat-player JSON` or
+`$UPPD_COMPAT_PLAYER`, default the `claude` player; `players[0].model` overlays it);
+`server.mode "model"` runs as `auto`; `accept` scores only if the referee passed (the referee
+decides); `next` is created up front and starts `after` this table scores (`{{evidence}}` and
+`{{reply}}` both mean the previous answer).

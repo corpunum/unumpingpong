@@ -199,6 +199,14 @@ CREATE TABLE IF NOT EXISTS cards (
 );
 CREATE INDEX IF NOT EXISTS cards_table ON cards(table_id, id);
 CREATE INDEX IF NOT EXISTS cards_run ON cards(run_id, id);
+CREATE TABLE IF NOT EXISTS merge_log (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, table_id TEXT NOT NULL,
+  decision TEXT NOT NULL, reason TEXT NOT NULL, details_json TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS merge_log_table ON merge_log(table_id, id);
+CREATE TABLE IF NOT EXISTS table_meta (
+  table_id TEXT PRIMARY KEY, meta_json TEXT NOT NULL
+);
 "#;
 
 const V2_TABLE_COLUMNS: &[(&str, &str, &str)] = &[
@@ -216,7 +224,7 @@ const V2_TABLE_COLUMNS: &[(&str, &str, &str)] = &[
     ("tables", "inflight_json", "TEXT"),
 ];
 
-const SCHEMA_VERSION: i64 = 4;
+const SCHEMA_VERSION: i64 = 5;
 
 const TABLE_COLS: &str = "id, run_id, name, goal, status, phase, player, after_id, created_ms, \
     started_ms, ended_ms, rallies, max_rallies, wall_secs, tokens, cost_usd, session, trail, \
@@ -1043,6 +1051,76 @@ impl Store {
             .map_err(e)?;
         notify::bump();
         Ok(())
+    }
+
+    /// Attach a JSON document to a table (the OpenUnum-compatible API keeps the original
+    /// request there).
+    pub fn meta_set(&self, table_id: &str, meta: &Value) -> R<()> {
+        self.conn
+            .execute(
+                "INSERT INTO table_meta (table_id, meta_json) VALUES (?1, ?2) \
+                 ON CONFLICT(table_id) DO UPDATE SET meta_json = excluded.meta_json",
+                params![table_id, meta.to_string()],
+            )
+            .map_err(e)?;
+        Ok(())
+    }
+
+    pub fn meta_get(&self, table_id: &str) -> R<Option<Value>> {
+        let s: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT meta_json FROM table_meta WHERE table_id = ?1",
+                [table_id],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(e)?;
+        Ok(s.and_then(|s| serde_json::from_str(&s).ok()))
+    }
+
+    /// Record an auto-merge decision (merged or not) with its reason.
+    pub fn log_merge(
+        &self,
+        table_id: &str,
+        decision: &str,
+        reason: &str,
+        details: &Value,
+    ) -> R<()> {
+        self.conn
+            .execute(
+                "INSERT INTO merge_log (ts, table_id, decision, reason, details_json) \
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![now_ms(), table_id, decision, reason, details.to_string()],
+            )
+            .map_err(e)?;
+        self.event(
+            table_id,
+            "auto_merge",
+            json!({"decision": decision, "reason": reason}),
+        )
+    }
+
+    /// Auto-merge decisions of a table, oldest first.
+    pub fn merge_log(&self, table_id: &str) -> R<Vec<Value>> {
+        let mut st = self
+            .conn
+            .prepare(
+                "SELECT id, ts, decision, reason, details_json FROM merge_log \
+                 WHERE table_id = ?1 ORDER BY id",
+            )
+            .map_err(e)?;
+        let rows = st
+            .query_map([table_id], |r| {
+                let d: String = r.get(4)?;
+                Ok(json!({
+                    "id": r.get::<_, i64>(0)?, "ts": r.get::<_, i64>(1)?,
+                    "decision": r.get::<_, String>(2)?, "reason": r.get::<_, String>(3)?,
+                    "details": serde_json::from_str::<Value>(&d).unwrap_or(Value::Null),
+                }))
+            })
+            .map_err(e)?;
+        Ok(rows.filter_map(Result::ok).collect())
     }
 
     pub fn events_since(&self, after_id: i64, limit: usize) -> R<Vec<EventRow>> {

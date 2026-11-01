@@ -192,7 +192,7 @@ pub fn worktree_add(repo: &Path, path: &Path, branch: &str, base: &str) -> Resul
     }))
 }
 
-fn upp_ident() -> BTreeMap<String, String> {
+pub fn upp_ident() -> BTreeMap<String, String> {
     [
         ("GIT_AUTHOR_NAME", "unumpingpong"),
         ("GIT_AUTHOR_EMAIL", "upp@localhost"),

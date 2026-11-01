@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Auto-merge** (`auto_merge` on a table): after the referee passes, the verified point is
+  fast-forwarded or conflict-free rebased onto the target branch of a clean repository, the repo's
+  test command runs, and only then a plain push; failures reset the target. Every decision is a
+  `merge_log` row with its reason.
+- **OpenUnum-compatible API**: `/api/pingpong/tables[/{id}[/answer|/stop]]` with OpenUnum's request
+  and response shapes, so its `pingpong_*` MCP tools work against `uppd` unchanged.
+- `deploy/systemd/uppd.service` (user unit, not installed).
 - **`openunum` player, session-tree mode** (`parent_session`, `model`, `thinking`): each table's
   player is an OpenUnum worker under that session, spawned on rally 1 and resumed with every
   later ball (`POST /api/sessions/:id/resume`), so OpenUnum's budgets, guards, memory and UI

@@ -43,6 +43,15 @@ API:
   GET  /api/events[?since=ID]         Server-Sent Events (one `data:` JSON per event)
   GET  /api/export[?run=ID]           every rally as JSON lines
 
+OpenUnum-compatible routes (what the `pingpong_*` MCP tools call; same paths and shapes):
+  GET  /api/pingpong/tables[?status=S&limit=N]   {ok, tables}
+  POST /api/pingpong/tables                      201 {ok, table}   {goal, referee, server, players, next...}
+  GET  /api/pingpong/tables/{id}                 {ok, table} with ball and rallies
+  POST /api/pingpong/tables/{id}/answer          {note, verdict: return|accept|stop}
+  POST /api/pingpong/tables/{id}/stop            {reason}
+These tables run with the default player: --compat-player JSON (a player spec, e.g. a
+JSON object with kind = openunum) or $UPPD_COMPAT_PLAYER; default: the claude player.
+
 Binds to loopback by default (no token needed there unless --auth); any other address
 always requires the token. Docs: https://github.com/corpunum/unumpingpong";
 
@@ -53,6 +62,7 @@ struct Opts {
     global_parallel: Option<usize>,
     auth: bool,
     token_file: Option<PathBuf>,
+    compat_player: Value,
 }
 
 fn parse() -> Result<Opts, String> {
@@ -64,6 +74,10 @@ fn parse() -> Result<Opts, String> {
         global_parallel: None,
         auth: false,
         token_file: None,
+        compat_player: std::env::var("UPPD_COMPAT_PLAYER")
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_else(|| json!({"kind": "claude"})),
     };
     let mut p = lexopt::Parser::from_env();
     while let Some(arg) = p.next().map_err(|e| e.to_string())? {
@@ -90,6 +104,15 @@ fn parse() -> Result<Opts, String> {
                         .parse()
                         .map_err(|e| format!("--global-parallel: {e}"))?,
                 )
+            }
+            Long("compat-player") => {
+                let raw = p
+                    .value()
+                    .map_err(|e| e.to_string())?
+                    .string()
+                    .map_err(|_| "bad --compat-player")?;
+                o.compat_player = serde_json::from_str(&raw)
+                    .map_err(|e| format!("--compat-player: invalid JSON: {e}"))?;
             }
             Long("auth") => o.auth = true,
             Long("token-file") => o.token_file = Some(p.value().map_err(|e| e.to_string())?.into()),
@@ -147,6 +170,7 @@ fn serve(o: Opts) -> Result<(), String> {
     for req in server.incoming_requests() {
         let db = db.clone();
         let parallel = o.parallel;
+        let player = Arc::new(o.compat_player.clone());
         let token = token.clone();
         std::thread::spawn(move || {
             if let Some(t) = token {
@@ -158,7 +182,7 @@ fn serve(o: Opts) -> Result<(), String> {
                     );
                 }
             }
-            handle(req, &db, parallel)
+            handle(req, &db, parallel, &player)
         });
     }
     Ok(())
@@ -308,7 +332,7 @@ fn decode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
-fn handle(mut req: Request, db: &Path, parallel: usize) {
+fn handle(mut req: Request, db: &Path, parallel: usize, player: &Value) {
     let url = req.url().to_string();
     let path = url
         .split('?')
@@ -332,6 +356,10 @@ fn handle(mut req: Request, db: &Path, parallel: usize) {
         Err(e) => return reply(req, 500, &json!({"ok": false, "error": e})),
     };
     let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+    if parts.starts_with(&["api", "pingpong"]) {
+        let (code, v) = pingpong(&store, &method, &parts, &body, &qget, player);
+        return reply(req, code, &v);
+    }
     let res: Result<Value, (u16, String)> = (|| {
         let bad = |e: String| (400u16, e);
         let nf = |e: String| (404u16, e);
@@ -446,6 +474,46 @@ fn handle(mut req: Request, db: &Path, parallel: usize) {
             ));
         }
         Err((code, e)) => reply(req, code, &json!({"ok": false, "error": e})),
+    }
+}
+
+/// The OpenUnum-compatible `/api/pingpong/...` routes.
+fn pingpong(
+    store: &Store,
+    method: &Method,
+    parts: &[&str],
+    body: &str,
+    qget: &dyn Fn(&str) -> Option<String>,
+    player: &Value,
+) -> (u16, Value) {
+    use upp_core::compat;
+    let json_body = || -> Result<Value, (u16, Value)> {
+        if body.trim().is_empty() {
+            return Ok(json!({}));
+        }
+        serde_json::from_str(body).map_err(|e| {
+            (
+                400,
+                json!({"ok": false, "error": "invalid_payload",
+                       "details": [{"field": "body", "issue": format!("invalid JSON: {e}")}]}),
+            )
+        })
+    };
+    let go = |f: &dyn Fn(Value) -> (u16, Value)| match json_body() {
+        Ok(b) => f(b),
+        Err(e) => e,
+    };
+    match (method, &parts[2..]) {
+        (Method::Get, ["tables"]) => compat::list(
+            store,
+            qget("status").as_deref(),
+            qget("limit").and_then(|s| s.parse().ok()).unwrap_or(100),
+        ),
+        (Method::Post, ["tables"]) => go(&|b| compat::create(store, player, &b)),
+        (Method::Get, ["tables", id]) => compat::get(store, id),
+        (Method::Post, ["tables", id, "answer"]) => go(&|b| compat::answer(store, id, &b)),
+        (Method::Post, ["tables", id, "stop"]) => go(&|b| compat::stop(store, id, &b)),
+        _ => (404, json!({"ok": false, "error": "not_found"})),
     }
 }
 

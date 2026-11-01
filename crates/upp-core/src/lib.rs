@@ -9,7 +9,9 @@
 //! Every rally is appended to a SQLite store: a replayable trace.
 
 pub mod api;
+pub mod automerge;
 pub mod card;
+pub mod compat;
 pub mod config;
 pub mod git;
 pub mod notify;

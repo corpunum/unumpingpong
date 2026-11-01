@@ -209,7 +209,12 @@ pub fn run_table(db: &Path, table_id: &str) -> String {
         Err(_) => return "error".into(),
     };
     match run_inner(&store, table_id) {
-        Ok(status) => status,
+        Ok(status) => {
+            if let Err(e) = crate::automerge::after_table(&store, table_id) {
+                let _ = store.event(table_id, "auto_merge_error", json!({"error": e}));
+            }
+            status
+        }
         Err(e) => {
             let _ = store.finish(table_id, "error", None, &e);
             "error".into()

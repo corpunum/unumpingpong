@@ -438,6 +438,34 @@ fn default_apply_from() -> String {
     "code_block".into()
 }
 
+/// Auto-merge of a table's verified point into a target branch (see `automerge`).
+/// Safety rules are fixed, not options: clean target repo, fast-forward or conflict-free
+/// rebase only, the `test` command must pass, a push is never forced.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct AutoMerge {
+    /// The repository to merge into. Default: the table's worktree repository.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repo: Option<String>,
+    /// Branch to merge into (must be checked out in `repo`). Default "main".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<String>,
+    /// Commit-ish to merge. Default: the table worktree's branch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// The repository's test command, run in `repo` after the merge. Required.
+    pub test: Cmd,
+    /// Push the target branch after the tests passed. Default true.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub push: Option<bool>,
+    /// Remote to push to. Default "origin".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote: Option<String>,
+    /// Timeout for the test command, seconds. Default 1800.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub test_timeout_secs: Option<u64>,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
 #[serde(deny_unknown_fields)]
 pub struct TableSpec {
@@ -503,6 +531,9 @@ pub struct TableSpec {
     /// before this table's referee runs (a conflict fails the rally). Default true.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merge_children: Option<bool>,
+    /// After the referee passes, merge the verified point into a target branch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_merge: Option<AutoMerge>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
@@ -782,6 +813,12 @@ pub fn validate_table(t: &TableSpec) -> Result<(), String> {
             }
             _ => {}
         }
+    }
+    if t.auto_merge.is_some() && (t.unverified || t.referee.is_empty()) {
+        return Err(format!(
+            "table '{}': auto_merge needs referee checks (an unverified point is never merged)",
+            t.name
+        ));
     }
     if let Some(s) = &t.server {
         if s.mode == ServerMode::Model && s.player.is_none() {
