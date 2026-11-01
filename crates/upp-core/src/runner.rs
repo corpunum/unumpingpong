@@ -975,11 +975,14 @@ fn run_inner(store: &Store, id: &str) -> Result<String, String> {
             Decision::Point => {
                 let reason = if unverified {
                     format!("UNVERIFIED point on rally {n}: no referee checks (unverified = true)")
+                } else if !verdict.passed {
+                    format!("point on rally {n}: accepted by the server although the referee failed (never auto-merged)")
                 } else {
                     format!("point on rally {n}")
                 };
                 // A worktree table's branch gets a commit of exactly the verified tree.
-                if let (Some(w), Some(tree)) = (
+                if let (true, Some(w), Some(tree)) = (
+                    verdict.passed,
                     store.table(id)?.and_then(|t| t.worktree),
                     prov["tree"].as_str(),
                 ) {
@@ -1000,7 +1003,12 @@ fn run_inner(store: &Store, id: &str) -> Result<String, String> {
                 return Ok("error".into());
             }
             Decision::Stop => {
-                store.finish(id, "stopped", None, "stopped by the server")?;
+                let why = store
+                    .meta_get(id)?
+                    .and_then(|m| m["stopReason"].as_str().map(String::from))
+                    .filter(|r| !r.trim().is_empty())
+                    .unwrap_or_else(|| "stopped by the server".into());
+                store.finish(id, "stopped", None, &why)?;
                 return Ok("stopped".into());
             }
             Decision::Expire(r) => {
@@ -1198,7 +1206,7 @@ fn decide(
             let note = a["note"].as_str().unwrap_or("").to_string();
             store.event(id, "server_answer", json!({"n": n, "answer": a}))?;
             match a["verdict"].as_str().unwrap_or("return") {
-                "accept" if verdict.passed => Ok(Decision::Point),
+                "accept" if verdict.passed || a["force_accept"] == true => Ok(Decision::Point),
                 "accept" => Ok(Decision::Return(format!(
                     "{note}\n(The server accepted, but the referee still fails: the referee decides.)"
                 ))),

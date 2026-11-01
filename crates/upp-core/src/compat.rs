@@ -223,6 +223,9 @@ pub fn validate(body: &Value, template: bool, depth: usize) -> Vec<Value> {
             _ => bad(&mut errors, "players", "expected non-empty array"),
         }
     }
+    if let Some(am) = o.get("autoMerge").filter(|a| !a.is_null()) {
+        validate_auto_merge(am, &mut errors);
+    }
     if !template || o.contains_key("referee") {
         match o.get("referee") {
             None => bad(&mut errors, "referee", "required {cmd|checks}"),
@@ -263,6 +266,98 @@ pub fn validate(body: &Value, template: bool, depth: usize) -> Vec<Value> {
         }
     }
     errors
+}
+
+const AUTO_MERGE_KEYS: [&str; 8] = [
+    "repo",
+    "target",
+    "source",
+    "test",
+    "push",
+    "remote",
+    "testTimeoutMs",
+    "testTimeoutSecs",
+];
+
+fn validate_auto_merge(am: &Value, errors: &mut Vec<Value>) {
+    let Some(o) = am.as_object() else {
+        return bad(errors, "autoMerge", "expected object {repo, source, test}");
+    };
+    for k in o.keys() {
+        if !AUTO_MERGE_KEYS.contains(&k.as_str()) {
+            bad(errors, format!("autoMerge.{k}"), "unknown field");
+        }
+    }
+    // Compat tables have no worktree of their own, so the repo and the commit-ish are explicit.
+    for k in ["repo", "source"] {
+        if !o.get(k).is_some_and(is_str) {
+            bad(
+                errors,
+                format!("autoMerge.{k}"),
+                "required non-empty string",
+            );
+        }
+    }
+    for k in ["target", "remote"] {
+        if o.get(k).is_some_and(|v| !is_str(v)) {
+            bad(
+                errors,
+                format!("autoMerge.{k}"),
+                "expected non-empty string",
+            );
+        }
+    }
+    match o.get("test") {
+        Some(t) if is_str(t) => {}
+        Some(Value::Array(a)) if !a.is_empty() && a.iter().all(is_str) => {}
+        _ => bad(
+            errors,
+            "autoMerge.test",
+            "required command (string or non-empty string array)",
+        ),
+    }
+    if o.get("push").is_some_and(|v| !v.is_boolean()) {
+        bad(errors, "autoMerge.push", "expected boolean");
+    }
+    if o.get("testTimeoutMs")
+        .is_some_and(|v| !in_range(v, 1000.0, 86_400_000.0))
+    {
+        bad(
+            errors,
+            "autoMerge.testTimeoutMs",
+            "number in [1000,86400000]",
+        );
+    }
+    if o.get("testTimeoutSecs")
+        .is_some_and(|v| !in_range(v, 1.0, 86_400.0))
+    {
+        bad(errors, "autoMerge.testTimeoutSecs", "number in [1,86400]");
+    }
+}
+
+/// OpenUnum-style camelCase -> the engine's `auto_merge` table field.
+fn auto_merge_of(am: &Value) -> Value {
+    let mut out = Map::new();
+    for (from, to) in [
+        ("repo", "repo"),
+        ("target", "target"),
+        ("source", "source"),
+        ("test", "test"),
+        ("push", "push"),
+        ("remote", "remote"),
+        ("testTimeoutSecs", "test_timeout_secs"),
+    ] {
+        if let Some(v) = am.get(from).filter(|v| !v.is_null()) {
+            out.insert(to.into(), v.clone());
+        }
+    }
+    if let (None, Some(ms)) = (am.get("testTimeoutSecs"), am["testTimeoutMs"].as_f64()) {
+        out.insert(
+            "test_timeout_secs".into(),
+            json!((ms / 1000.0).ceil() as u64),
+        );
+    }
+    Value::Object(out)
 }
 
 // ---- create ------------------------------------------------------------------------
@@ -391,6 +486,9 @@ pub fn create(store: &Store, default_player: &Value, body: &Value) -> (u16, Valu
                 eff.insert(k.into(), v.clone());
             }
         }
+        if let Some(a) = tpl.get("autoMerge").filter(|a| a.is_object()) {
+            eff.insert("autoMerge".into(), a.clone());
+        }
         if let Some(n) = tpl.get("next").filter(|n| n.is_object()) {
             eff.insert("next".into(), n.clone());
         }
@@ -446,6 +544,9 @@ pub fn create(store: &Store, default_player: &Value, body: &Value) -> (u16, Valu
         });
         if let Some(c) = cwd {
             t["cwd"] = json!(c);
+        }
+        if let Some(a) = s.get("autoMerge").filter(|a| a.is_object()) {
+            t["auto_merge"] = auto_merge_of(a);
         }
         if i > 0 {
             t["after"] = json!(if i == 1 {
@@ -563,6 +664,7 @@ pub fn view(store: &Store, t: &TableRow, detail: bool) -> Value {
         json!({
             "referee": last.map(|r| referee_view(&r.checks, r.passed)),
             "reply": t.result, "rallies": t.rallies,
+            "acceptedBy": if last.is_some_and(|r| !r.passed) { json!("server") } else { Value::Null },
         })
     } else {
         Value::Null
@@ -570,6 +672,9 @@ pub fn view(store: &Store, t: &TableRow, detail: bool) -> Value {
     let end_reason = if t.is_terminal() {
         json!(if status == "done" {
             "point".to_string()
+        } else if status == "stopped" && meta["stopReason"].is_string() {
+            // Queued tables are skipped by the engine without a reason of our own.
+            meta["stopReason"].as_str().unwrap_or_default().to_string()
         } else {
             t.reason.clone().unwrap_or_default()
         })
@@ -708,7 +813,16 @@ pub fn answer(store: &Store, id: &str, body: &Value) -> (u16, Value) {
     }
     let verdict = body["verdict"].as_str().unwrap_or("return");
     let note = body["note"].as_str().unwrap_or("");
-    if let Err(e) = api::card_answer(store, &t.id, verdict, note, None, None) {
+    // OpenUnum scores an accepted ball even when the referee failed (acceptedBy: server);
+    // such a point is never auto-merged (the engine logs why).
+    let sent = store.pending(Some(&t.id)).and_then(|p| {
+        if p.is_empty() {
+            Err("no ball waiting for its server".to_string())
+        } else {
+            api::answer_with(store, &t.id, verdict, note, true)
+        }
+    });
+    if let Err(e) = sent {
         return err(
             409,
             "not_waiting_for_server",
@@ -746,6 +860,22 @@ pub fn stop(store: &Store, id: &str, body: &Value) -> (u16, Value) {
         e.1["status"] = json!(status);
         return e;
     }
+    let reason = body["reason"]
+        .as_str()
+        .map(str::trim)
+        .filter(|r| !r.is_empty());
+    if let Some(r) = reason {
+        // The engine ends the table as "stopped by the server" unless it finds our reason.
+        let mut meta = store
+            .meta_get(&t.id)
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| json!({}));
+        meta["stopReason"] = json!(r);
+        if let Err(e) = store.meta_set(&t.id, &meta) {
+            return err(500, "store_error", json!([{"field": "meta", "issue": e}]));
+        }
+    }
     if let Err(e) = api::stop(store, &t.id) {
         return err(
             409,
@@ -757,7 +887,7 @@ pub fn stop(store: &Store, id: &str, body: &Value) -> (u16, Value) {
     let mut table = view(store, &t, false);
     if is_active(table["status"].as_str().unwrap_or("")) {
         table["status"] = json!("stopped");
-        table["endReason"] = json!(body["reason"].as_str().unwrap_or("stopped_by_request"));
+        table["endReason"] = json!(reason.unwrap_or("stopped_by_request"));
     }
     (200, json!({"ok": true, "table": table}))
 }

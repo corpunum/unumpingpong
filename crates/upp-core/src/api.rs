@@ -269,13 +269,30 @@ pub fn transcript(store: &Store, id: &str, rally: Option<u32>) -> Result<Value, 
 }
 
 pub fn answer(store: &Store, id: &str, verdict: &str, note: &str) -> Result<Value, String> {
+    answer_with(store, id, verdict, note, false)
+}
+
+/// Like `answer`; `force_accept` lets an `accept` score the point even when the referee
+/// failed (OpenUnum's semantics: the server's word is final). Such a point is never
+/// auto-merged and never committed as a verified tree.
+pub fn answer_with(
+    store: &Store,
+    id: &str,
+    verdict: &str,
+    note: &str,
+    force_accept: bool,
+) -> Result<Value, String> {
     if !matches!(verdict, "accept" | "return" | "stop") {
         return Err(format!(
             "verdict must be accept, return or stop (got '{verdict}')"
         ));
     }
     let t = store.resolve(id)?;
-    let rally = store.answer(&t.id, &json!({"verdict": verdict, "note": note}))?;
+    let mut body = json!({"verdict": verdict, "note": note});
+    if force_accept && verdict == "accept" {
+        body["force_accept"] = json!(true);
+    }
+    let rally = store.answer(&t.id, &body)?;
     store.add_server_tokens(&t.id, card::est_tokens(note))?;
     Ok(json!({"ok": true, "table_id": t.id, "rally": rally, "verdict": verdict}))
 }

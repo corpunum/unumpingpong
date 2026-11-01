@@ -364,3 +364,216 @@ fn openunum_pingpong_routes_and_shapes() {
     let (code, v) = status_of(ureq::post(&format!("{url}/{sid}/stop")).send_json(json!({})));
     assert_eq!((code, v["error"].as_str()), (409, Some("table_not_active")));
 }
+
+struct Compat {
+    _d: tempfile::TempDir,
+    _guard: KillOnDrop,
+    base: String,
+}
+
+impl Compat {
+    fn url(&self) -> String {
+        format!("{}/api/pingpong/tables", self.base)
+    }
+    fn dir(&self, name: &str) -> String {
+        let p = self._d.path().join(name);
+        std::fs::create_dir_all(&p).unwrap();
+        p.to_string_lossy().into_owned()
+    }
+}
+
+fn spawn_compat() -> Compat {
+    let d = tempfile::tempdir().unwrap();
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let addr = format!("127.0.0.1:{port}");
+    let player = json!({"kind": "shell", "command": ["sh", fake("fake-coder.sh")]}).to_string();
+    let child = Command::new(env!("CARGO_BIN_EXE_uppd"))
+        .args(["--listen", &addr, "--db"])
+        .arg(d.path().join("upp.db"))
+        .args(["--compat-player", &player])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let guard = KillOnDrop(child);
+    let t0 = Instant::now();
+    while ureq::get(&format!("http://{addr}/health")).call().is_err() {
+        assert!(t0.elapsed() < Duration::from_secs(10), "uppd did not start");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    Compat {
+        _d: d,
+        _guard: guard,
+        base: format!("http://{addr}"),
+    }
+}
+
+fn git(dir: &std::path::Path, args: &[&str]) -> String {
+    let o = Command::new("git")
+        .args(args)
+        .current_dir(dir)
+        .env("GIT_AUTHOR_NAME", "t")
+        .env("GIT_AUTHOR_EMAIL", "t@t")
+        .env("GIT_COMMITTER_NAME", "t")
+        .env("GIT_COMMITTER_EMAIL", "t@t")
+        .output()
+        .unwrap();
+    assert!(
+        o.status.success(),
+        "git {args:?}: {}",
+        String::from_utf8_lossy(&o.stderr)
+    );
+    String::from_utf8_lossy(&o.stdout).trim().to_string()
+}
+
+/// A throwaway repo on `main` with a `feat` branch one commit ahead (fast-forwardable).
+fn merge_repo(c: &Compat) -> std::path::PathBuf {
+    let repo = PathBuf::from(c.dir("repo"));
+    git(&repo, &["init", "-q", "-b", "main"]);
+    std::fs::write(repo.join("README"), "base\n").unwrap();
+    git(&repo, &["add", "-A"]);
+    git(&repo, &["commit", "-q", "-m", "base"]);
+    git(&repo, &["checkout", "-q", "-b", "feat"]);
+    std::fs::write(repo.join("feature.txt"), "feature\n").unwrap();
+    git(&repo, &["add", "-A"]);
+    git(&repo, &["commit", "-q", "-m", "feature"]);
+    git(&repo, &["checkout", "-q", "main"]);
+    repo
+}
+
+fn wait_merge_log(base: &str, id: &str) -> Value {
+    let t0 = Instant::now();
+    loop {
+        let (_, v) = status_of(ureq::get(&format!("{base}/api/pingpong/tables/{id}")).call());
+        if v["table"]["mergeLog"]
+            .as_array()
+            .is_some_and(|l| !l.is_empty())
+        {
+            return v["table"]["mergeLog"][0].clone();
+        }
+        assert!(
+            t0.elapsed() < Duration::from_secs(20),
+            "no merge decision: {v}"
+        );
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+#[test]
+fn compat_accept_scores_a_failed_referee_but_never_merges() {
+    let c = spawn_compat();
+    let url = c.url();
+    let repo = merge_repo(&c);
+    let (code, v) = status_of(ureq::post(&url).send_json(json!({
+        "goal": "write 42", "server": {"mode": "external"},
+        "referee": {"cmd": "grep -qx 42 answer.txt", "cwd": c.dir("w1")},
+        "autoMerge": {"repo": repo, "source": "feat", "test": "true", "push": false}
+    })));
+    assert_eq!(code, 201, "{v}");
+    let id = v["table"]["id"].as_str().unwrap().to_string();
+    let t = wait_status(&c.base, &id, "waiting_server");
+    assert_eq!(t["rallies"][0]["passed"], false);
+    // OpenUnum semantics: accept scores the ball although the referee failed.
+    let (code, v) = status_of(
+        ureq::post(&format!("{url}/{id}/answer")).send_json(json!({"verdict": "accept"})),
+    );
+    assert_eq!(code, 200, "{v}");
+    let done = wait_status(&c.base, &id, "done");
+    assert_eq!(done["endReason"], "point");
+    assert_eq!(done["score"]["point"], true);
+    assert_eq!(done["evidence"]["acceptedBy"], "server");
+    assert_eq!(done["evidence"]["referee"]["passed"], false);
+    // ...but a server-accepted point with a failed referee never auto-merges.
+    let log = wait_merge_log(&c.base, &id);
+    assert_eq!(log["decision"], "skipped_referee", "{log}");
+    assert!(log["reason"].as_str().unwrap().contains("referee"), "{log}");
+    assert!(!repo.join("feature.txt").exists());
+    assert_eq!(git(&repo, &["rev-list", "--count", "main"]), "1");
+}
+
+#[test]
+fn compat_stop_persists_the_callers_reason() {
+    let c = spawn_compat();
+    let url = c.url();
+    let (_, v) = status_of(ureq::post(&url).send_json(json!({
+        "goal": "never", "server": {"mode": "external"},
+        "referee": {"cmd": "grep -qx 42 answer.txt", "cwd": c.dir("w2")}
+    })));
+    let id = v["table"]["id"].as_str().unwrap().to_string();
+    wait_status(&c.base, &id, "waiting_server");
+    let (code, v) = status_of(
+        ureq::post(&format!("{url}/{id}/stop")).send_json(json!({"reason": "owner changed mind"})),
+    );
+    assert_eq!(code, 200, "{v}");
+    assert_eq!(v["table"]["endReason"], "owner changed mind");
+    // The reason survives the engine ending the table, in get and in list.
+    let t = wait_status(&c.base, &id, "stopped");
+    assert_eq!(t["endReason"], "owner changed mind");
+    let (_, l) = status_of(ureq::get(&format!("{url}?status=stopped")).call());
+    assert_eq!(l["tables"][0]["endReason"], "owner changed mind");
+    // No reason: the default stays.
+    let (_, v) = status_of(ureq::post(&url).send_json(json!({
+        "goal": "never", "server": {"mode": "external"},
+        "referee": {"cmd": "grep -qx 42 answer.txt", "cwd": c.dir("w3")}
+    })));
+    let id2 = v["table"]["id"].as_str().unwrap().to_string();
+    wait_status(&c.base, &id2, "waiting_server");
+    status_of(ureq::post(&format!("{url}/{id2}/stop")).send_json(json!({})));
+    assert_eq!(
+        wait_status(&c.base, &id2, "stopped")["endReason"],
+        "stopped by the server"
+    );
+}
+
+#[test]
+fn compat_create_passes_auto_merge_through() {
+    let c = spawn_compat();
+    let url = c.url();
+    // spec.mjs-style payload errors.
+    let (code, v) = status_of(ureq::post(&url).send_json(json!({
+        "goal": "g", "referee": {"cmd": "true"},
+        "autoMerge": {"repo": "/x", "test": 5, "push": "yes", "bogus": 1}
+    })));
+    assert_eq!(code, 400);
+    assert_eq!(v["error"], "invalid_payload");
+    let fields: Vec<&str> = v["details"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["field"].as_str().unwrap())
+        .collect();
+    for f in [
+        "autoMerge.source",
+        "autoMerge.test",
+        "autoMerge.push",
+        "autoMerge.bogus",
+    ] {
+        assert!(fields.contains(&f), "{f} missing in {fields:?}");
+    }
+    let (code, v) = status_of(
+        ureq::post(&url)
+            .send_json(json!({"goal": "g", "referee": {"cmd": "true"}, "autoMerge": "main"})),
+    );
+    assert_eq!(
+        (code, v["details"][0]["field"].as_str()),
+        (400, Some("autoMerge"))
+    );
+
+    // create -> referee passes -> merged into the throwaway repo.
+    let repo = merge_repo(&c);
+    let (code, v) = status_of(ureq::post(&url).send_json(json!({
+        "goal": "just pass", "referee": {"cmd": "true", "cwd": c.dir("w4")},
+        "autoMerge": {"repo": repo, "source": "feat", "target": "main", "test": "test -f feature.txt", "push": false}
+    })));
+    assert_eq!(code, 201, "{v}");
+    let id = v["table"]["id"].as_str().unwrap().to_string();
+    wait_status(&c.base, &id, "done");
+    let log = wait_merge_log(&c.base, &id);
+    assert_eq!(log["decision"], "merged_ff", "{log}");
+    assert!(repo.join("feature.txt").exists());
+    assert_eq!(git(&repo, &["rev-list", "--count", "main"]), "2");
+}
