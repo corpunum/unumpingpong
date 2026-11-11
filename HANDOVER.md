@@ -32,7 +32,7 @@ Update this file with every change that alters state, open work or how to ship. 
 
 ## Open work
 
-- Cut **v0.5.0** from what is on `main` (changelog is ready; tag, release notes, binaries).
+- Tag **v0.5.0** once the version commit is green on `main` (`release.yml` builds the binaries).
 - Benchmark refresh: `bench/` has the 12 real bug fixes; rerun when a player or model changes and
   update `docs/BENCHMARKS.md`.
 - Integrations to verify end to end after the release: `docs/integrations/` (Claude Code, Codex,

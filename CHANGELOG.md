@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.5.0 (2026-11-11) - Auto-merge, OpenUnum-compatible API, session-tree player
 
 - **Auto-merge** (`auto_merge` on a table): after the referee passes, the verified point is
   fast-forwarded or conflict-free rebased onto the target branch of a clean repository, the repo's
