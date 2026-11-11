@@ -47,6 +47,12 @@ fn http_api_and_sse() {
         .into_json()
         .unwrap();
     assert_eq!(h["parallel"], 2);
+    // Shared engine /health fields: which build runs, and since when.
+    assert_eq!(h["ok"], true);
+    assert_eq!(h["name"], "uppd");
+    assert!(!h["git_sha"].as_str().unwrap().is_empty());
+    let started = h["started_at"].as_str().unwrap();
+    assert!(started.len() == 20 && started.ends_with('Z'), "{started}");
 
     let created: Value = ureq::post(&format!("{base}/api/tables"))
         .send_json(json!({

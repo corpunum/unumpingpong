@@ -408,7 +408,7 @@ scored. Without `--watch` it prints one line per event, which suits CI logs.
 ```
 uppd [--listen 127.0.0.1:7878] [--db PATH] [--parallel N]
 
-GET  /health
+GET  /health                           ok, name, version, git_sha (build commit), started_at, store, parallel
 GET  /api/tables[?all=1&run=ID]
 POST /api/tables[?parent=ID]           match JSON or a single table (?parent: sub-tables)
 GET  /api/tables/{id}[?full=1]         rallies as cards, token split, pending ball
