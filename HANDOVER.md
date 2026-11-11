@@ -14,6 +14,13 @@ Update this file with every change that alters state, open work or how to ship. 
 - CI: one Linux job (`fmt`, `clippy -D warnings`, all tests, example validation). `release.yml`
   runs on a `v*` tag.
 
+- OpenUnum still runs its own JS pingpong runner (`runtime.pingpong.daemonUrl` is empty), so live
+  rallies do not reach `uppd` yet. Making `uppd` the engine is the orchestrator's decision after a
+  parity rally (11-11).
+- `leaseMs` means a total wall budget in both runners (set once at start). A table that expires
+  quickly was given a small `leaseMs` by its caller.
+- Use `~/.cargo/bin/cargo` (1.99): `/usr/bin/cargo` 1.75 cannot read the v4 `Cargo.lock`.
+
 ## How to ship
 
 1. Detached worktree of `origin/main`, change, then the gates:

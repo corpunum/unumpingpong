@@ -17,6 +17,12 @@
   `crates/uppd/build.rs`; `UNUM_GIT_SHA` overrides, `unknown` outside a checkout) and `started_at`
   (RFC 3339 UTC), so a monitor can tell a daemon that is older than the installed source.
 - Benchmark label: the local model is Qwen3.8 Flash Next (it was mislabelled Qwen 3.6 35B).
+- `openunum` player: the worker spawn sends `observationRoots: [cwd]`, so OpenUnum counts the
+  worker's writes in the table directory as its effects. This removes the false "execution contract
+  not observed" warning on player replies; it needs OpenUnum with the `observationRoots` spawn
+  option, and older OpenUnum ignores it. `implementationWorktree` is sent only when `cwd` is a git
+  top level: OpenUnum refuses it for any other directory, so tables outside a repository could not
+  spawn a worker.
 
 ## v0.4.0 (2026-10-21) - Merge-up, clean benchmark, harness comparison
 

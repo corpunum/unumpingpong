@@ -37,6 +37,15 @@ pub struct OpenUnumPlayer {
     pub poll: Duration,
 }
 
+/// True when `dir` is the top level of a git working tree.
+fn is_git_toplevel(dir: &std::path::Path) -> bool {
+    let canon = |p: &std::path::Path| std::fs::canonicalize(p).ok();
+    match (crate::git::toplevel(dir), canon(dir)) {
+        (Some(top), Some(d)) => canon(&top) == Some(d),
+        _ => false,
+    }
+}
+
 impl OpenUnumPlayer {
     pub fn new(spec: PlayerSpec) -> Self {
         let PlayerSpec::Openunum {
@@ -131,9 +140,16 @@ impl OpenUnumPlayer {
                     "title": format!("upp: {}", ctx.table_id),
                     "handoff": "UnumPingPong table: an external referee decides when this is done. \
                                 Reply with what you changed and how you checked it.",
-                    "implementationWorktree": ctx.cwd,
+                    // OpenUnum observes writes here, so they count as the worker's
+                    // effects (no false "execution contract not observed" warning).
+                    "observationRoots": [ctx.cwd],
                     "budget": {"wallTimeMs": wall_ms, "refereeOwned": true},
                 });
+                // A repository assignment only for a git top level: OpenUnum refuses
+                // `implementationWorktree` for any other directory.
+                if is_git_toplevel(&ctx.cwd) {
+                    args["implementationWorktree"] = json!(ctx.cwd);
+                }
                 if let Some(m) = &self.model {
                     args["model"] = json!(m);
                 }
@@ -588,6 +604,24 @@ mod tests {
     }
 
     #[test]
+    fn worktree_assignment_only_for_a_git_top_level() {
+        let plain = tempfile::tempdir().unwrap();
+        assert!(!is_git_toplevel(plain.path()));
+        let repo = tempfile::tempdir().unwrap();
+        let ok = std::process::Command::new("git")
+            .args(["init", "-q"])
+            .current_dir(repo.path())
+            .status()
+            .unwrap()
+            .success();
+        assert!(ok);
+        assert!(is_git_toplevel(repo.path()));
+        let sub = repo.path().join("sub");
+        std::fs::create_dir(&sub).unwrap();
+        assert!(!is_git_toplevel(&sub));
+    }
+
+    #[test]
     fn session_tree_mode_spawns_one_worker_and_resumes_it() {
         let log = Arc::new(Mutex::new(Vec::new()));
         let url = tree_fake(log.clone());
@@ -615,7 +649,8 @@ mod tests {
             spawn.contains("\"session_spawn\"")
                 && spawn.contains("chat:parent")
                 && spawn.contains("\"refereeOwned\":true")
-                && spawn.contains("\"luna\""),
+                && spawn.contains("\"luna\"")
+                && spawn.contains("\"observationRoots\""),
             "{spawn}"
         );
         assert_eq!(
