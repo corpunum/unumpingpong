@@ -13,12 +13,19 @@ Update this file with every change that alters state, open work or how to ship. 
 - `~/.config/uppd/env` sets `UPPD_COMPAT_PLAYER` (openunum player, model luna, parent = OpenUnum
   work-log session). A table's `players[0].model` overrides it, e.g. the local main model
   `llama-cpp-local/openai/qwen3.8-flash-next-uncensored-lean`.
-- OpenUnum still runs its own JS pingpong runner (`runtime.pingpong.daemonUrl` empty). Making `uppd`
-  the engine is corpunum-82's decision after the parity rally (hub U-3061e807).
 - False "execution contract not observed" warning on player replies: hub U-70323beb. Fixed in
   OpenUnum 3056e768 (observationRoots) + ef250f14 (per-root snapshots; the live workspace ~/main is
   too deep for one shared walk). The uppd player sends `observationRoots: [cwd]`.
 - `leaseMs` means a total wall budget in both runners (set once at start).
+- `upp referee --repo DIR --sha SHA -- <cmd>` referees a commit in a temp detached worktree (no
+  model) and prints a JSON verdict (v1). unumship (0.8.12+) calls it for entries queued with
+  `--referee '<cmd>'` (or a repo default `referee`): exit 1 → `referee_failed`, the entry stays out
+  of the bundle; exit 2 → `referee_error`, it still ships. Hub U-80a29982. The light check for this
+  repo: example validation with the installed `upp` plus `cargo fmt --check`
+  (the full tests run in the unumship gate).
+- OpenUnum routes `/api/pingpong/*` here (`runtime.pingpong.daemonUrl`, set by corpunum-82
+  11-12 06:50Z; rollback through corpunum-82). The compat player has no model pin, so rallies
+  default to OpenUnum's main local model (backup of the old env: `~/.config/uppd/env.bak-20261112`).
 - Use `~/.cargo/bin/cargo` (1.99): `/usr/bin/cargo` 1.75 cannot read the v4 `Cargo.lock`.
 
 ## How to ship
