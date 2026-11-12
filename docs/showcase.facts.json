@@ -1,0 +1,325 @@
+{
+  "name": "UnumPingPong",
+  "repo": "corpunum/unumpingpong",
+  "oneLiner": "AI agents play ping-pong with your tasks and a referee that runs the real tests decides who scores.",
+  "license": "Apache-2.0",
+  "version": "v0.5.0",
+  "updated": "2026-11-12",
+  "quickstart": {
+    "lang": "bash",
+    "code": "curl -fsSL https://github.com/corpunum/unumpingpong/releases/latest/download/install.sh | sh\nupp --db /tmp/upp-demo.db run examples/demo/demo.toml --watch   # no model needed: scripted players, real referee"
+  },
+  "measured": [
+    {
+      "metric": "Claude Haiku (Claude Code), tables vs one session: billable tokens",
+      "value": "-40% (418,803 to 252,350)",
+      "baseline": "one agent session, 418,803 billable tokens",
+      "sample": "10 real bug fixes from a private repo (OpenUnum), one run per cell, 10/10 verified both arms",
+      "method": "python3 bench/repo/repo_bench.py (arm A one agent session vs arm B UnumPingPong tables), verdict in bench/repo/results.md",
+      "date": "2026-10-20",
+      "evidence": "bench/repo/results.md"
+    },
+    {
+      "metric": "Claude Haiku (Claude Code), tables vs one session: wall time",
+      "value": "9.4 min to 1.2 min",
+      "baseline": "one agent session, 9.4 min",
+      "sample": "10 real bug fixes from a private repo (OpenUnum), one run per cell, 10/10 verified both arms",
+      "method": "python3 bench/repo/repo_bench.py (arm A one agent session vs arm B UnumPingPong tables), verdict in bench/repo/results.md",
+      "date": "2026-10-20",
+      "evidence": "bench/repo/results.md"
+    },
+    {
+      "metric": "Claude Haiku run 2, tables vs one session: billable tokens",
+      "value": "-39% (405,719 to 249,077)",
+      "baseline": "one agent session, 405,719 billable tokens",
+      "sample": "10 real bug fixes from a private repo (OpenUnum), one run per cell, 10/10 verified both arms",
+      "method": "python3 bench/repo/repo_bench.py (arm A one agent session vs arm B UnumPingPong tables), verdict in bench/repo/results.md",
+      "date": "2026-10-21",
+      "evidence": "bench/repo/results.md"
+    },
+    {
+      "metric": "Claude Haiku run 2, tables vs one session: wall time",
+      "value": "3.1 min to 0.9 min",
+      "baseline": "one agent session, 3.1 min",
+      "sample": "10 real bug fixes from a private repo (OpenUnum), one run per cell, 10/10 verified both arms",
+      "method": "python3 bench/repo/repo_bench.py (arm A one agent session vs arm B UnumPingPong tables), verdict in bench/repo/results.md",
+      "date": "2026-10-21",
+      "evidence": "bench/repo/results.md"
+    },
+    {
+      "metric": "Nemotron 3 Ultra (NVIDIA NIM via opencode), tables vs one session: billable tokens",
+      "value": "-28% (2,089,092 to 1,496,904)",
+      "baseline": "one agent session, 2,089,092 billable tokens",
+      "sample": "10 real bug fixes from a private repo (OpenUnum), one run per cell, 10/10 verified both arms",
+      "method": "python3 bench/repo/repo_bench.py (arm A one agent session vs arm B UnumPingPong tables), verdict in bench/repo/results.md",
+      "date": "2026-10-21",
+      "evidence": "bench/repo/results.md"
+    },
+    {
+      "metric": "Nemotron 3 Ultra (NVIDIA NIM via opencode), tables vs one session: wall time",
+      "value": "19.1 min to 29.0 min",
+      "baseline": "one agent session, 19.1 min",
+      "sample": "10 real bug fixes from a private repo (OpenUnum), one run per cell, 10/10 verified both arms",
+      "method": "python3 bench/repo/repo_bench.py (arm A one agent session vs arm B UnumPingPong tables), verdict in bench/repo/results.md",
+      "date": "2026-10-21",
+      "evidence": "bench/repo/results.md"
+    },
+    {
+      "metric": "GPT Luna low in nanocode, tables vs one session: billable tokens",
+      "value": "-7% (1,841,152 to 1,715,708)",
+      "baseline": "one agent session, 1,841,152 billable tokens",
+      "sample": "10 real bug fixes from a private repo (OpenUnum), one run per cell, 10/10 verified both arms",
+      "method": "python3 bench/repo/repo_bench.py (arm A one agent session vs arm B UnumPingPong tables), verdict in bench/repo/results.md",
+      "date": "2026-10-21",
+      "evidence": "bench/repo/results.md"
+    },
+    {
+      "metric": "GPT Luna low in nanocode, tables vs one session: wall time",
+      "value": "2.2 min to 1.3 min",
+      "baseline": "one agent session, 2.2 min",
+      "sample": "10 real bug fixes from a private repo (OpenUnum), one run per cell, 10/10 verified both arms",
+      "method": "python3 bench/repo/repo_bench.py (arm A one agent session vs arm B UnumPingPong tables), verdict in bench/repo/results.md",
+      "date": "2026-10-21",
+      "evidence": "bench/repo/results.md"
+    },
+    {
+      "metric": "GPT Luna low in Codex CLI, tables vs one session: verified tasks",
+      "value": "8/10 to 10/10",
+      "baseline": "one agent session, 8/10",
+      "sample": "10 real bug fixes from a private repo (OpenUnum), one run per cell, Codex CLI player",
+      "method": "python3 bench/repo/repo_bench.py (arm A one agent session vs arm B UnumPingPong tables), verdict in bench/repo/results.md",
+      "date": "2026-10-21",
+      "evidence": "bench/repo/results.md"
+    },
+    {
+      "metric": "GPT Luna low in Codex CLI, tables vs one session: billable tokens",
+      "value": "+50% (215,372 to 322,173)",
+      "baseline": "one agent session, 215,372 billable tokens",
+      "sample": "10 real bug fixes from a private repo (OpenUnum), one run per cell, Codex CLI player",
+      "method": "python3 bench/repo/repo_bench.py (arm A one agent session vs arm B UnumPingPong tables), verdict in bench/repo/results.md",
+      "date": "2026-10-21",
+      "evidence": "bench/repo/results.md"
+    },
+    {
+      "metric": "GPT Luna low in Codex CLI, tables vs one session: wall time",
+      "value": "2.1 min to 0.9 min",
+      "baseline": "one agent session, 2.1 min",
+      "sample": "10 real bug fixes from a private repo (OpenUnum), one run per cell, Codex CLI player",
+      "method": "python3 bench/repo/repo_bench.py (arm A one agent session vs arm B UnumPingPong tables), verdict in bench/repo/results.md",
+      "date": "2026-10-21",
+      "evidence": "bench/repo/results.md"
+    },
+    {
+      "metric": "Local Qwen (OpenUnum player), tables vs one session: verified tasks",
+      "value": "7/10 to 9/10",
+      "baseline": "one agent session, 7/10",
+      "sample": "10 real bug fixes from a private repo (OpenUnum), one run per cell, billable tokens not recorded for this player",
+      "method": "python3 bench/repo/repo_bench.py (arm A one agent session vs arm B UnumPingPong tables), verdict in bench/repo/results.md",
+      "date": "2026-10-20",
+      "evidence": "bench/repo/results.md"
+    },
+    {
+      "metric": "Local Qwen (OpenUnum player), tables vs one session: wall time",
+      "value": "25.0 min to 101.8 min",
+      "baseline": "one agent session, 25.0 min",
+      "sample": "10 real bug fixes from a private repo (OpenUnum), one run per cell, one local GPU",
+      "method": "python3 bench/repo/repo_bench.py (arm A one agent session vs arm B UnumPingPong tables), verdict in bench/repo/results.md",
+      "date": "2026-10-20",
+      "evidence": "bench/repo/results.md"
+    },
+    {
+      "metric": "gpt-oss-20b (NVIDIA NIM via opencode), tables vs one session: verified tasks",
+      "value": "1/10 to 6/10",
+      "baseline": "one agent session, 1/10",
+      "sample": "10 real bug fixes from a private repo (OpenUnum), one run per cell, opencode player",
+      "method": "python3 bench/repo/repo_bench.py (arm A one agent session vs arm B UnumPingPong tables), verdict in bench/repo/results.md",
+      "date": "2026-10-21",
+      "evidence": "bench/repo/results.md"
+    },
+    {
+      "metric": "gpt-oss-20b (NVIDIA NIM via opencode), tables vs one session: billable tokens",
+      "value": "+1693% (172,616 to 3,095,466)",
+      "baseline": "one agent session, 172,616 billable tokens",
+      "sample": "10 real bug fixes from a private repo (OpenUnum), one run per cell, opencode player",
+      "method": "python3 bench/repo/repo_bench.py (arm A one agent session vs arm B UnumPingPong tables), verdict in bench/repo/results.md",
+      "date": "2026-10-21",
+      "evidence": "bench/repo/results.md"
+    },
+    {
+      "metric": "gpt-oss-20b (NVIDIA NIM via opencode), tables vs one session: wall time",
+      "value": "3.7 min to 140.8 min",
+      "baseline": "one agent session, 3.7 min",
+      "sample": "10 real bug fixes from a private repo (OpenUnum), one run per cell, opencode player",
+      "method": "python3 bench/repo/repo_bench.py (arm A one agent session vs arm B UnumPingPong tables), verdict in bench/repo/results.md",
+      "date": "2026-10-21",
+      "evidence": "bench/repo/results.md"
+    },
+    {
+      "metric": "Same model (GPT Luna low) at tables, billable tokens by harness: Codex CLI",
+      "value": "322,173",
+      "baseline": "nanocode 1,715,708; OpenUnum agent loop 737,775 (after cache-key fix)",
+      "sample": "10 real bug fixes from a private repo (OpenUnum), one run per cell, 10/10 verified",
+      "method": "python3 bench/repo/repo_bench.py (arm A one agent session vs arm B UnumPingPong tables), verdict in bench/repo/results.md",
+      "date": "2026-10-21",
+      "evidence": "bench/repo/results.md"
+    },
+    {
+      "metric": "Same model (GPT Luna low) at tables, billable tokens by harness: OpenUnum agent loop (after cache-key fix)",
+      "value": "737,775",
+      "baseline": "Codex CLI 322,173; nanocode 1,715,708",
+      "sample": "10 real bug fixes from a private repo (OpenUnum), one run per cell, 10/10 verified, run r3 cache-key",
+      "method": "python3 bench/repo/repo_bench.py (arm A one agent session vs arm B UnumPingPong tables), verdict in bench/repo/results.md",
+      "date": "2026-10-21",
+      "evidence": "bench/repo/results.md"
+    },
+    {
+      "metric": "Same model (GPT Luna low) at tables, billable tokens by harness: nanocode",
+      "value": "1,715,708",
+      "baseline": "Codex CLI 322,173; OpenUnum agent loop 737,775 (after cache-key fix)",
+      "sample": "10 real bug fixes from a private repo (OpenUnum), one run per cell, 10/10 verified",
+      "method": "python3 bench/repo/repo_bench.py (arm A one agent session vs arm B UnumPingPong tables), verdict in bench/repo/results.md",
+      "date": "2026-10-21",
+      "evidence": "bench/repo/results.md"
+    },
+    {
+      "metric": "OpenUnum agent loop with GPT Luna low: effect of adding a Codex prompt-cache key",
+      "value": "-55% tokens (1,630,638 to 737,775)",
+      "baseline": "OpenUnum agent loop run r2 before the fix, 1,630,638 billable tokens",
+      "sample": "10 real bug fixes from a private repo (OpenUnum), one run per cell, tables arm, run r2 (9/10) vs run r3 cache-key (10/10)",
+      "method": "bench/repo/repo_bench.py tables arm before and after the OpenUnum fix; token counts in bench/repo/results.md (rows r2 and r3 cache-key); the -55% figure is stated in CHANGELOG.md",
+      "date": "2026-10-21",
+      "evidence": "bench/repo/results.md"
+    },
+    {
+      "metric": "Nemotron 3 Ultra free via opencode, tables vs one session: billable tokens",
+      "value": "1,423,536 vs 1,430,334 (+0%)",
+      "baseline": "one agent session, 1,423,536 billable tokens",
+      "sample": "10 real bug fixes from a private repo (OpenUnum), one run per cell, 10/10 verified both arms",
+      "method": "python3 bench/repo/repo_bench.py (arm A one agent session vs arm B UnumPingPong tables), verdict in bench/repo/results.md",
+      "date": "2026-10-21",
+      "evidence": "bench/repo/results.md"
+    },
+    {
+      "metric": "Nemotron 3 Ultra free via opencode, tables vs one session: wall time",
+      "value": "6.8 min to 18.1 min",
+      "baseline": "one agent session, 6.8 min",
+      "sample": "10 real bug fixes from a private repo (OpenUnum), one run per cell, 10/10 verified both arms",
+      "method": "python3 bench/repo/repo_bench.py (arm A one agent session vs arm B UnumPingPong tables), verdict in bench/repo/results.md",
+      "date": "2026-10-21",
+      "evidence": "bench/repo/results.md"
+    },
+    {
+      "metric": "Open benchmark, Claude Haiku (Claude Code): verified tasks, one session and tables",
+      "value": "12/12 and 12/12",
+      "baseline": "one agent session, 12/12",
+      "sample": "12 real bug fixes from public Python libraries (more-itertools, tomlkit, toolz), one run per cell",
+      "method": "python3 bench/repo/repo_bench.py --tasks bench/open/tasks.json --player haiku --arm a,b; table in bench/open/results.md",
+      "date": "2026-10-21",
+      "evidence": "bench/open/results.md"
+    },
+    {
+      "metric": "Open benchmark, Nemotron 3 Ultra free on NVIDIA NIM (opencode): verified tasks",
+      "value": "10/12 alone to 12/12 at tables",
+      "baseline": "one agent session, 10/12",
+      "sample": "12 real bug fixes from public Python libraries, one run per cell",
+      "method": "python3 bench/repo/repo_bench.py --tasks bench/open/tasks.json --player opencode --arm a,b; table in bench/open/results.md",
+      "date": "2026-10-21",
+      "evidence": "bench/open/results.md"
+    }
+  ],
+  "constants": [
+    {
+      "value": "10",
+      "what": "real bug fixes from a private repo (OpenUnum) in the real-repository benchmark (bench/repo/results.md)"
+    },
+    {
+      "value": "12",
+      "what": "real bug fixes from three public Python libraries in the open benchmark (bench/open/README.md)"
+    },
+    {
+      "value": "max_rallies = 5, wall_secs = 900",
+      "what": "lease values in the README example table (a runaway guard)"
+    },
+    {
+      "value": "2026-10-21",
+      "what": "date the agent sandbox read-only node_modules defect was fixed; earlier benchmark runs are listed as superseded (CHANGELOG.md v0.4.0)"
+    }
+  ],
+  "links": [
+    {
+      "label": "README",
+      "url": "README.md"
+    },
+    {
+      "label": "Reference",
+      "url": "docs/REFERENCE.md"
+    },
+    {
+      "label": "Real-repository benchmark",
+      "url": "bench/repo/results.md"
+    },
+    {
+      "label": "Open benchmark",
+      "url": "bench/open/README.md"
+    },
+    {
+      "label": "Changelog",
+      "url": "CHANGELOG.md"
+    },
+    {
+      "label": "Integrations",
+      "url": "docs/integrations/README.md"
+    },
+    {
+      "label": "Releases",
+      "url": "https://github.com/corpunum/unumpingpong/releases"
+    }
+  ],
+  "derived": [
+    {
+      "value": "3x",
+      "ratio": [
+        "3.1 min",
+        "0.9 min"
+      ],
+      "what": "Claude Haiku run 2 one-session wall time over tables wall time, from \"Claude Haiku run 2, tables vs one session: wall time\" (3.1 min / 0.9 min = 3.44), normal rounding to 0 decimals"
+    },
+    {
+      "value": "8x",
+      "ratio": [
+        "9.4 min",
+        "1.2 min"
+      ],
+      "what": "Claude Haiku one-session wall time over tables wall time, from \"Claude Haiku (Claude Code), tables vs one session: wall time\" (9.4 min / 1.2 min = 7.83), normal rounding to 0 decimals"
+    },
+    {
+      "value": "4x",
+      "ratio": [
+        "101.8 min",
+        "25.0 min"
+      ],
+      "what": "Local Qwen tables wall time over one-session wall time, from \"Local Qwen (OpenUnum player), tables vs one session: wall time\" (101.8 min / 25.0 min = 4.07), normal rounding to 0 decimals"
+    },
+    {
+      "value": "18x",
+      "ratio": [
+        "3,095,466",
+        "172,616"
+      ],
+      "what": "gpt-oss-20b tables billable tokens over one-session billable tokens, from \"gpt-oss-20b (NVIDIA NIM via opencode), tables vs one session: billable tokens\" (3,095,466 / 172,616 = 17.93), normal rounding to 0 decimals"
+    },
+    {
+      "value": "2.3 hours",
+      "convert": "140.8 min",
+      "what": "gpt-oss-20b tables wall time from \"gpt-oss-20b (NVIDIA NIM via opencode), tables vs one session: wall time\" (140.8 min / 60 = 2.347 hours), normal rounding to 1 decimal"
+    },
+    {
+      "value": "2.7x",
+      "ratio": [
+        "18.1 min",
+        "6.8 min"
+      ],
+      "what": "Nemotron 3 Ultra free tables wall time over one-session wall time, from \"Nemotron 3 Ultra free via opencode, tables vs one session: wall time\" (18.1 min / 6.8 min = 2.66), normal rounding to 1 decimal"
+    }
+  ]
+}
