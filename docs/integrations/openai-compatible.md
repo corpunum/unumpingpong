@@ -12,6 +12,7 @@ api_key_env = "OPENAI_API_KEY"          # name of the env var; omit for local se
 system = "You are a careful Rust programmer."
 temperature = 0.2
 max_tokens = 4096
+reasoning_effort = "medium"            # sent with every request; a table's `effort` overrides it per rally
 timeout_secs = 900
 halogen_keep = false
 extra = { top_p = 0.9 }                 # merged into every request body

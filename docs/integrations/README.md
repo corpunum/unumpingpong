@@ -21,7 +21,7 @@ with a model; **docs** = from documentation only.
 | --- | --- | --- | --- | --- |
 | Any command | `shell` | tested (CI, scripted agents) | n/a | [main README](../../README.md#players) |
 | OpenAI-compatible endpoints (llama.cpp, Halogen, vLLM, Ollama, LM Studio, cloud) | `openai` | tested live (Halogen 0.18, Qwen 3.8) | n/a | [openai-compatible.md](openai-compatible.md) |
-| OpenUnum | `openunum` | API checked against OpenUnum source | MCP client: docs | [openunum.md](openunum.md) |
+| OpenUnum | `openunum` | run live (own sessions or session-tree workers) | MCP client: docs; `uppd` serves OpenUnum's `/api/pingpong` API | [openunum.md](openunum.md) |
 | Claude Code | `claude` | flags verified (2.1.303) | registered (`✔ Connected`) | [claude-code.md](claude-code.md) |
 | OpenAI Codex CLI | `codex` | flags verified (0.160.0) | docs (`codex mcp add --help`) | [codex.md](codex.md) |
 | Gemini CLI | `gemini` | flags verified (0.45.1) | registered (listed; needs a trusted folder) | [gemini-cli.md](gemini-cli.md) |
