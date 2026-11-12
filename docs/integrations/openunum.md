@@ -57,6 +57,13 @@ elsewhere). The worker's own working directory is its OpenUnum session workspace
 2026-11-12; it even wrote a copy into OpenUnum's own checkout). Later rallies resume the same worker (`POST /api/sessions/<id>/resume`); its result
 summary is the answer. A stopped table cancels the worker.
 
+If the worker writes outside the table `cwd` (say a skills repo as `cwd`, output in
+`/home/x/briefs/sprites/rally-1`), set `observe = ["/home/x/briefs/sprites"]` on the table (or
+`observationRoots` in the `/api/pingpong/tables` body); otherwise OpenUnum does not count those
+writes as execution and the reply carries a false "execution contract not observed" warning. Each
+entry must be absolute; one that does not exist yet is replaced by its nearest existing ancestor
+(OpenUnum needs existing directories), and an entry that would resolve to `/` or `$HOME` is skipped.
+
 **Status: run live (2026-10-20).** Two parallel tables with `kind = "openunum"` against a live
 OpenUnum (local Qwen 3.6 35B via Halogen), each a small Python task checked by a `python3`
 referee: **2/2 points on rally 1** (slugify 116 s, fib 437 s on a shared, busy model endpoint).

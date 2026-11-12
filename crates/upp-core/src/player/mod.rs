@@ -33,6 +33,8 @@ pub struct PlayCtx {
     pub env: BTreeMap<String, String>,
     /// Reasoning effort hint for this rally (the table's `effort`).
     pub effort: Option<String>,
+    /// Extra directories to observe for the worker's writes (the table's `observe`).
+    pub observe: Vec<String>,
     /// Set when the table is stopped: players abort the running call (process group killed).
     pub cancel: Arc<AtomicBool>,
 }
@@ -53,6 +55,7 @@ impl PlayCtx {
             session_key: session_key.to_string(),
             env: BTreeMap::new(),
             effort: None,
+            observe: Vec::new(),
             cancel: Arc::new(AtomicBool::new(false)),
         }
     }

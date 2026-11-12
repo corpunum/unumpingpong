@@ -104,6 +104,9 @@ fn inherit(t: &mut TableSpec, from: &TableSpec, cwd: Option<String>) {
     }
     // A sub-table works in the parent's directory: it must not run git there either.
     t.no_provenance |= from.no_provenance;
+    if t.observe.is_empty() {
+        t.observe = from.observe.clone();
+    }
 }
 
 /// Open sub-tables of `parent` (nested tables): they join the parent's run at depth

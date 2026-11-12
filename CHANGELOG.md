@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- New table option `observe = ["/abs/dir", ...]` (OpenUnum-compatible API: `observationRoots`):
+  extra directories the OpenUnum player passes as `observationRoots` besides the table's `cwd`,
+  so a worker that writes outside the cwd no longer gets a false "execution contract not observed"
+  warning. Entries must be absolute; a missing directory is replaced by its nearest existing
+  ancestor, and an entry that resolves to `/` or `$HOME` is skipped. Sub-tables inherit it.
+
 - New table option `no_provenance` (default false): the runner runs no git in the table's
   directory (no provenance snapshots, no recovery diff) and records provenance as
   `{"git": false}`; sub-tables inherit it; not allowed with `worktree`. `upp referee --fix` sets it

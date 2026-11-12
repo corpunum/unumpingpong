@@ -510,6 +510,11 @@ pub struct TableSpec {
     /// Not allowed together with `worktree`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub no_provenance: bool,
+    /// Extra absolute directories the OpenUnum player observes for the worker's file writes
+    /// (besides the cwd). A directory that does not exist yet is fine: the player passes its
+    /// nearest existing ancestor.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub observe: Vec<String>,
     /// Ask the player for a result card (`<card>` tail block). Default true.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub card: Option<bool>,
@@ -823,6 +828,14 @@ pub fn validate_table(t: &TableSpec) -> Result<(), String> {
             _ => {}
         }
     }
+    for o in &t.observe {
+        if !std::path::Path::new(o).is_absolute() {
+            return Err(format!(
+                "table '{}': observe entry {o:?} must be an absolute path",
+                t.name
+            ));
+        }
+    }
     if t.no_provenance && t.worktree.is_some() {
         return Err(format!(
             "table '{}': no_provenance cannot be combined with worktree (a worktree needs git)",
@@ -872,6 +885,22 @@ kind = "claude"
 model = "sonnet"
 args = ["--permission-mode", "acceptEdits"]
 "#;
+
+    #[test]
+    fn observe_must_be_absolute() {
+        let ok = TOML.replace(
+            "ball = \"do a\"",
+            "ball = \"do a\"\nobserve = [\"/abs/out\", \"/abs/two\"]",
+        );
+        let m = MatchFile::parse(&ok).unwrap();
+        assert_eq!(m.resolve().unwrap()[0].observe, ["/abs/out", "/abs/two"]);
+        let rel = TOML.replace(
+            "ball = \"do a\"",
+            "ball = \"do a\"\nobserve = [\"out/dir\"]",
+        );
+        let e = MatchFile::parse(&rel).unwrap().resolve().unwrap_err();
+        assert!(e.contains("observe") && e.contains("absolute"), "{e}");
+    }
 
     #[test]
     fn toml_defaults_and_chain() {

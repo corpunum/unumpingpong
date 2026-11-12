@@ -245,6 +245,28 @@ pub fn validate(body: &Value, template: bool, depth: usize) -> Vec<Value> {
     if o.get("cwd").is_some_and(|v| !is_str(v)) {
         bad(&mut errors, "cwd", "expected string");
     }
+    if let Some(r) = o.get("observationRoots").filter(|v| !v.is_null()) {
+        match r.as_array() {
+            None => bad(&mut errors, "observationRoots", "expected array of strings"),
+            Some(a) => {
+                for (i, p) in a.iter().enumerate() {
+                    match p.as_str() {
+                        Some(s) if std::path::Path::new(s).is_absolute() => {}
+                        Some(_) => bad(
+                            &mut errors,
+                            format!("observationRoots[{i}]"),
+                            "expected absolute path",
+                        ),
+                        None => bad(
+                            &mut errors,
+                            format!("observationRoots[{i}]"),
+                            "expected string",
+                        ),
+                    }
+                }
+            }
+        }
+    }
     if o.get("parentSessionId").is_some_and(|v| !v.is_string()) {
         bad(&mut errors, "parentSessionId", "expected string");
     }
@@ -477,6 +499,7 @@ pub fn create(store: &Store, default_player: &Value, body: &Value) -> (u16, Valu
             "maxRallies",
             "leaseMs",
             "cwd",
+            "observationRoots",
         ] {
             if let Some(v) = tpl
                 .get(k)
@@ -544,6 +567,9 @@ pub fn create(store: &Store, default_player: &Value, body: &Value) -> (u16, Valu
         });
         if let Some(c) = cwd {
             t["cwd"] = json!(c);
+        }
+        if let Some(r) = s.get("observationRoots").filter(|r| r.is_array()) {
+            t["observe"] = r.clone();
         }
         if let Some(a) = s.get("autoMerge").filter(|a| a.is_object()) {
             t["auto_merge"] = auto_merge_of(a);
@@ -922,6 +948,39 @@ mod tests {
         assert!(fields.contains(&"next.referee.cmd"), "{fields:?}");
         // A chain template may leave referee and goal out.
         assert!(validate(&json!({"referee": {"cmd": "true"}, "next": {}}), false, 0).len() == 1);
+    }
+
+    #[test]
+    fn observation_roots_validate_and_map_to_observe() {
+        let base =
+            |r: Value| json!({"goal": "g", "referee": {"cmd": "true"}, "observationRoots": r});
+        for bad_val in [json!("/a"), json!([1]), json!(["rel/dir"]), json!({"a": 1})] {
+            let e = validate(&base(bad_val.clone()), false, 0);
+            assert!(
+                e.iter()
+                    .any(|x| x["field"].as_str().unwrap().starts_with("observationRoots")),
+                "{bad_val}: {e:?}"
+            );
+        }
+        assert!(validate(&base(json!(["/x/y"])), false, 0).is_empty());
+        let d = tempfile::tempdir().unwrap();
+        let store = Store::open(&d.path().join("upp.db")).unwrap();
+        let player = json!({"kind": "shell", "command": "cat"});
+        let mut body = base(json!(["/x/y"]));
+        body["next"] = json!({"goal": "n", "referee": {"cmd": "true"}});
+        let (code, v) = create(&store, &player, &body);
+        assert_eq!(code, 201, "{v}");
+        let id = v["table"]["id"].as_str().unwrap();
+        assert_eq!(store.spec(id).unwrap().observe, ["/x/y"]);
+        let next = store
+            .tables(None, false)
+            .unwrap()
+            .into_iter()
+            .find(|t| t.after_id.as_deref() == Some(id))
+            .expect("chained table");
+        assert_eq!(store.spec(&next.id).unwrap().observe, ["/x/y"]);
+        let (code, _) = create(&store, &player, &base(json!("nope")));
+        assert_eq!(code, 400);
     }
 
     #[test]

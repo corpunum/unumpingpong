@@ -630,6 +630,7 @@ fn run_inner(store: &Store, id: &str) -> Result<String, String> {
     env.insert("UPP_DEPTH".into(), row.depth.to_string());
     let base = PlayCtx {
         env,
+        observe: spec.observe.clone(),
         cancel: cancel.clone(),
         ..PlayCtx::new(id, 0, cwd.clone(), deadline, id)
     };

@@ -20,6 +20,7 @@
 use super::{PlayCtx, Player, Reply};
 use crate::config::PlayerSpec;
 use serde_json::{json, Value};
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 pub struct OpenUnumPlayer {
@@ -35,6 +36,33 @@ pub struct OpenUnumPlayer {
     child: Option<String>,
     /// Delay between `/api/chat/pending` polls.
     pub poll: Duration,
+}
+
+/// The directories OpenUnum observes for the worker's writes: the cwd, then each configured
+/// `observe` entry. OpenUnum accepts only existing directories, so an entry that does not exist
+/// yet is replaced by its nearest existing ancestor. An entry that is relative, has `..`, or
+/// resolves to `/` or `$HOME` itself (too broad to observe) is skipped. No duplicates.
+fn observation_roots(cwd: &Path, observe: &[String], home: Option<&Path>) -> Vec<PathBuf> {
+    let mut roots = vec![cwd.to_path_buf()];
+    for o in observe {
+        let p = Path::new(o);
+        if !p.is_absolute()
+            || p.components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
+            continue;
+        }
+        let Some(a) = p.ancestors().find(|a| a.is_dir()) else {
+            continue;
+        };
+        if a.parent().is_none() || home.is_some_and(|h| h == a) {
+            continue;
+        }
+        if !roots.iter().any(|r| r == a) {
+            roots.push(a.to_path_buf());
+        }
+    }
+    roots
 }
 
 /// True when `dir` is the top level of a git working tree.
@@ -149,7 +177,11 @@ impl OpenUnumPlayer {
                                 Reply with what you changed and how you checked it.",
                     // OpenUnum observes writes here, so they count as the worker's
                     // effects (no false "execution contract not observed" warning).
-                    "observationRoots": [ctx.cwd],
+                    "observationRoots": observation_roots(
+                        &ctx.cwd,
+                        &ctx.observe,
+                        std::env::var_os("HOME").as_deref().map(Path::new),
+                    ),
                     "budget": {"wallTimeMs": wall_ms, "refereeOwned": true},
                 });
                 // A repository assignment only for a git top level: OpenUnum refuses
@@ -449,13 +481,19 @@ mod tests {
     }
 
     fn ctx() -> PlayCtx {
-        PlayCtx::new(
+        let mut c = PlayCtx::new(
             "t",
             1,
             PathBuf::from("."),
             Instant::now() + Duration::from_secs(5),
             "t",
-        )
+        );
+        c.observe = vec![format!("{}/upp-no-such/x", std::env::temp_dir().display())];
+        c
+    }
+
+    fn obs_dir() -> String {
+        std::env::temp_dir().display().to_string()
     }
 
     fn idle() -> Value {
@@ -611,6 +649,40 @@ mod tests {
     }
 
     #[test]
+    fn observation_roots_use_the_nearest_existing_ancestor() {
+        let d = tempfile::tempdir().unwrap();
+        let cwd = d.path().join("cwd");
+        std::fs::create_dir(&cwd).unwrap();
+        let out = d.path().join("out");
+        std::fs::create_dir(&out).unwrap();
+        let obs = |v: &[PathBuf]| {
+            v.iter()
+                .map(|p| p.to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+        };
+        let missing = out.join("sprites/rally-1");
+        let got = observation_roots(
+            &cwd,
+            &[
+                missing.to_string_lossy().into_owned(),
+                out.to_string_lossy().into_owned(),
+                cwd.to_string_lossy().into_owned(),
+                "/zz-upp-no-such-dir/x".into(),
+                "relative/dir".into(),
+            ],
+            Some(d.path()),
+        );
+        assert_eq!(obs(&got), obs(&[cwd.clone(), out.clone()]));
+        // $HOME itself is skipped too.
+        let got = observation_roots(
+            &cwd,
+            &[d.path().to_string_lossy().into_owned()],
+            Some(d.path()),
+        );
+        assert_eq!(obs(&got), obs(&[cwd]));
+    }
+
+    #[test]
     fn worktree_assignment_only_for_a_git_top_level() {
         let plain = tempfile::tempdir().unwrap();
         assert!(!is_git_toplevel(plain.path()));
@@ -658,6 +730,10 @@ mod tests {
                 && spawn.contains("\"refereeOwned\":true")
                 && spawn.contains("\"luna\"")
                 && spawn.contains("\"observationRoots\"")
+                && spawn.contains(&format!(
+                    "\"observationRoots\":[\".\",{}]",
+                    json!(obs_dir())
+                ))
                 && spawn.contains("Working directory for this task: "),
             "{spawn}"
         );
