@@ -4,8 +4,10 @@ Update this file with every change that alters state, open work or how to ship. 
 
 ## State (2026-11-12)
 
-- Released: **v0.5.0** (tag 2026-11-12 on 11eafa9; `release.yml` builds the binaries). Installed
-  `uppd` = 11eafa9 (`/health` git_sha), previous binary kept as `~/.local/bin/uppd.prev-e05c1f6`.
+- Released: **v0.6.0** (2026-11-12; tagged with `unumship release --repo unumpingpong --tag v0.6.0`
+  on the shipped-green head; `release.yml` builds the binaries). Previous: v0.5.0 on 11eafa9.
+  `upp referee --fix` is in v0.6.0 but held: no automatic use until the fix player runs sandboxed
+  (OpenUnum per-worker sandbox, hub U-4b3a6f59) and a narrow 4th review passes.
 - Workspace: `crates/upp-core` (library), `crates/upp` (CLI + TUI + MCP), `crates/uppd` (daemon,
   default `127.0.0.1:7878`). `crates/uppd/build.rs` embeds the build commit as `UNUM_GIT_SHA`.
 - CI: one Linux job (`fmt`, `clippy -D warnings`, all tests, example validation). `release.yml`
@@ -61,7 +63,9 @@ Update this file with every change that alters state, open work or how to ship. 
    `cargo fmt --all -- --check && cargo clippy --all-targets --locked -- -D warnings && cargo test --all-targets --locked`
    and `for f in examples/*.toml examples/demo/*.toml; do cargo run -q --bin upp -- validate "$f"; done`.
 2. One push to `main`; wait for CI to end green.
-3. Deploy the daemon only when no table is running (`GET /api/tables`): build `--release`, replace
+3. Release: bump `version` in Cargo.toml, rename "Unreleased" in CHANGELOG.md, ship that commit,
+   then tag it with `unumship release --repo unumpingpong --tag vX.Y.Z` (never a raw tag push).
+4. Deploy the daemon only when no table is running (`GET /api/tables`): build `--release`, replace
    the installed `uppd`, restart the unit, check `/health` shows the new `git_sha`.
 
 ## Open work

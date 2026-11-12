@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## v0.6.0 (2026-11-12) - Commit referee, sandboxed checks, observation roots
+
+Highlights: `upp referee` checks a commit in an isolated clone under bubblewrap and prints a JSON
+verdict (used by the unumship ship queue); the OpenUnum player no longer triggers OpenUnum's false
+"execution contract not observed" warning; every integration guide was verified end to end.
+`upp referee --fix` ships but is **held**: do not run it automatically until the fix player runs in
+its own sandbox (an unsandboxed player can change what the verify run trusts; see
+docs/REFERENCE.md "Refereeing a commit").
 
 - New table option `observe = ["/abs/dir", ...]` (OpenUnum-compatible API: `observationRoots`):
   extra directories the OpenUnum player passes as `observationRoots` besides the table's `cwd`,
