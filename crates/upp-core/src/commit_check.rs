@@ -14,7 +14,7 @@ use crate::config::Cmd;
 use crate::proc;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
-use std::os::unix::fs::{DirBuilderExt, MetadataExt, PermissionsExt};
+use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -236,6 +236,9 @@ fn sandbox_prefix(
         }
         a.extend([s("--tmpfs"), s(path)]);
     };
+    // bwrap's `--dev` makes /dev/shm a plain directory on the (read-only) root: give it a
+    // small tmpfs instead of an unlimited one.
+    tmpfs(&mut a, "/dev/shm", 256);
     tmpfs(&mut a, "/run", 64);
     if std::fs::symlink_metadata("/var/run")
         .map(|m| m.file_type().is_dir())
@@ -321,7 +324,10 @@ fn guarded_argv(
 }
 
 /// Run git for upp itself, never trusting config that a player or a checkout controls: no
-/// system or global config, no fsmonitor, no hooks, no prompts. Returns raw stdout.
+/// system or global config, no system or global attributes file, no fsmonitor, no hooks, no
+/// prompts. Returns raw stdout. In-tree `.gitattributes` are not switched off by this: they
+/// only select a filter or driver by name, and the commands behind those names live in config,
+/// which for every repository upp runs git against is its own (see `run_fix`).
 fn git_raw(dir: &Path, args: &[&str]) -> Result<String, String> {
     let mut argv: Vec<String> = [
         "git",
@@ -329,6 +335,8 @@ fn git_raw(dir: &Path, args: &[&str]) -> Result<String, String> {
         "core.fsmonitor=false",
         "-c",
         "core.hooksPath=/dev/null",
+        "-c",
+        "core.attributesFile=/dev/null",
     ]
     .iter()
     .map(|s| s.to_string())
@@ -337,6 +345,7 @@ fn git_raw(dir: &Path, args: &[&str]) -> Result<String, String> {
     argv.extend(args.iter().map(|s| s.to_string()));
     let env: BTreeMap<String, String> = [
         ("GIT_CONFIG_NOSYSTEM", "1"),
+        ("GIT_ATTR_NOSYSTEM", "1"),
         ("GIT_CONFIG_GLOBAL", "/dev/null"),
         ("GIT_TERMINAL_PROMPT", "0"),
     ]
@@ -371,18 +380,25 @@ impl Drop for TempClone {
 }
 
 /// Make every directory below `p` (without following symlinks) owner-accessible, so that a
-/// check's `chmod 000` cannot keep its tree from being removed.
+/// check's `chmod 000` cannot keep its tree from being removed. The directory is opened once
+/// with `O_PATH | O_NOFOLLOW | O_DIRECTORY` (a symlink swapped in after the caller looked is
+/// refused, and an unreadable directory can still be opened) and changed and listed through
+/// that descriptor's `/proc/self/fd` entry, which names the opened inode, not the path.
 fn make_removable(p: &Path) {
-    let Ok(m) = std::fs::symlink_metadata(p) else {
+    use std::os::fd::AsRawFd;
+    let Ok(f) = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_PATH | libc::O_NOFOLLOW | libc::O_DIRECTORY)
+        .open(p)
+    else {
         return;
     };
-    if !m.file_type().is_dir() {
-        return;
-    }
-    let _ = std::fs::set_permissions(p, std::fs::Permissions::from_mode(m.mode() | 0o700));
-    if let Ok(rd) = std::fs::read_dir(p) {
+    let Ok(m) = f.metadata() else { return };
+    let fdp = PathBuf::from(format!("/proc/self/fd/{}", f.as_raw_fd()));
+    let _ = std::fs::set_permissions(&fdp, std::fs::Permissions::from_mode(m.mode() | 0o700));
+    if let Ok(rd) = std::fs::read_dir(&fdp) {
         for e in rd.flatten() {
-            make_removable(&e.path());
+            make_removable(&p.join(e.file_name()));
         }
     }
 }
@@ -513,39 +529,84 @@ fn temp_clone(repo: &Path, full: &str, kind: &str) -> Result<TempClone, String> 
     Ok(wt)
 }
 
-/// `UPP_SHA`, `UPP_BASE_SHA` (first parent, empty for a root commit) and `UPP_CHANGED_PATHS`
-/// (newline-separated), computed by upp's trusted git in the source repository.
-fn check_env(repo: &Path, full: &str) -> Result<BTreeMap<String, String>, String> {
-    let base = git(
-        repo,
-        &["rev-parse", "--verify", "--quiet", &format!("{full}^")],
-    )
-    .unwrap_or_default();
-    let raw = if base.is_empty() {
-        git_raw(repo, &["ls-tree", "-r", "-z", "--name-only", full])?
-    } else {
-        git_raw(
+/// Changed paths up to this many bytes (newline-joined) are also exported as `UPP_CHANGED_PATHS`.
+const CHANGED_PATHS_ENV_MAX: usize = 32 * 1024;
+/// Name of the NUL-terminated path list inside each clone's `.git` (read-only in the sandbox).
+const CHANGED_PATHS_FILE: &str = "upp-changed-paths";
+
+/// What the check is told about the commit, computed by upp's trusted git in the source repo.
+struct CheckEnv {
+    full: String,
+    base: String,
+    paths: Vec<String>,
+}
+
+impl CheckEnv {
+    /// `base` is the first parent (empty for a root commit); `paths` the files the commit
+    /// changes (for a root commit, all its files).
+    fn new(repo: &Path, full: &str) -> Result<CheckEnv, String> {
+        let base = git(
             repo,
-            &[
-                "diff",
-                "-z",
-                "--name-only",
-                "--no-renames",
-                "--no-ext-diff",
-                &base,
-                full,
-            ],
-        )?
-    };
-    let paths: Vec<&str> = raw.split('\0').filter(|p| !p.is_empty()).collect();
-    Ok([
-        ("UPP_SHA", full.to_string()),
-        ("UPP_BASE_SHA", base),
-        ("UPP_CHANGED_PATHS", paths.join("\n")),
-    ]
-    .into_iter()
-    .map(|(k, v)| (k.to_string(), v))
-    .collect())
+            &["rev-parse", "--verify", "--quiet", &format!("{full}^")],
+        )
+        .unwrap_or_default();
+        let raw = if base.is_empty() {
+            git_raw(repo, &["ls-tree", "-r", "-z", "--name-only", full])?
+        } else {
+            git_raw(
+                repo,
+                &[
+                    "diff",
+                    "-z",
+                    "--name-only",
+                    "--no-renames",
+                    "--no-ext-diff",
+                    &base,
+                    full,
+                ],
+            )?
+        };
+        Ok(CheckEnv {
+            full: full.to_string(),
+            base,
+            paths: raw
+                .split('\0')
+                .filter(|p| !p.is_empty())
+                .map(str::to_string)
+                .collect(),
+        })
+    }
+
+    /// The variables for a check that runs in `clone`: `UPP_SHA`, `UPP_BASE_SHA`,
+    /// `UPP_CHANGED_PATHS_FILE` (absolute path of the NUL-terminated list, written here before
+    /// anything runs; it lies under the clone's `.git`, read-only in the sandbox) and, only
+    /// when the list is small and has no newline in a name, `UPP_CHANGED_PATHS`
+    /// (newline-separated). Otherwise `UPP_CHANGED_PATHS_TRUNCATED=1`: one environment string
+    /// above 128 KiB makes execve fail, and a newline in a name makes the text ambiguous.
+    fn install(&self, clone: &Path) -> Result<BTreeMap<String, String>, String> {
+        let file = clone.join(".git").join(CHANGED_PATHS_FILE);
+        let mut bytes = Vec::new();
+        for p in &self.paths {
+            bytes.extend_from_slice(p.as_bytes());
+            bytes.push(0);
+        }
+        std::fs::write(&file, &bytes).map_err(|e| format!("write {}: {e}", file.display()))?;
+        let mut env: BTreeMap<String, String> = [
+            ("UPP_SHA", self.full.clone()),
+            ("UPP_BASE_SHA", self.base.clone()),
+            ("UPP_CHANGED_PATHS_FILE", file.to_string_lossy().to_string()),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v))
+        .collect();
+        let joined = self.paths.join("\n");
+        if joined.len() <= CHANGED_PATHS_ENV_MAX && !self.paths.iter().any(|p| p.contains('\n')) {
+            env.insert("UPP_CHANGED_PATHS".into(), joined);
+        } else {
+            env.insert("UPP_CHANGED_PATHS_TRUNCATED".into(), "1".into());
+        }
+        Ok(env)
+    }
 }
 
 /// Run `cmd` (a shell line) in a fresh isolated clone of `sha` in `repo`, with `timeout`.
@@ -575,8 +636,9 @@ pub fn check_commit_with(
     )
     .map_err(|e| format!("unknown commit {sha}: {e}"))?;
     sweep_older_than(&temp_parent()?, STALE_AFTER);
-    let env = check_env(repo, &full)?;
+    let ce = CheckEnv::new(repo, &full)?;
     let wt = temp_clone(repo, &full, "referee")?;
+    let env = ce.install(&wt.path)?;
     let (argv, sandbox) = guarded_argv(cmd, guard, &wt.path, &env)?;
     let out = proc::run(&argv, &wt.path, None, &env, timeout)?;
     let point = out.ok();
@@ -718,11 +780,9 @@ fn run_fix(
     guard: &Guard,
 ) -> Result<Value, String> {
     let full = v["sha"].as_str().unwrap_or_default().to_string();
-    let env = check_env(repo, &full)?;
-    // The clean clone first, with a .git nobody else has touched: upp's own git commands run
-    // against it (the player's directory is only ever a work tree).
-    let clean = temp_clone(repo, &full, "referee-verify")?;
+    let ce = CheckEnv::new(repo, &full)?;
     let wt = temp_clone(repo, &full, "referee-fix")?;
+    let env = ce.install(&wt.path)?;
     // Everything that comes from the caller (the check command, the protect list, the path)
     // goes into the ball through `inert()`: the rally runner expands `{{file:..}}`,
     // `{{search:..}}` and `{{prev.*}}` in the ball outside the sandbox.
@@ -808,9 +868,31 @@ fn run_fix(
         // The table's point only says the check passed in the player's directory. A fix counts
         // when its PATCH, applied to a clean checkout of the commit, passes the check, and it
         // leaves the protected paths alone.
+        //
+        // The clean clone is created only now, after the table (and so the player) has ended:
+        // its random name did not exist while the player ran. What is guaranteed: its `.git`
+        // config is byte-for-byte what `git init` + `fetch` + `checkout` wrote, checked here
+        // and again before the patch is applied (a difference fails the fix), so no filter,
+        // diff driver, include or hook-like setting can name a command for upp's own `git add
+        // -A`; `core.attributesFile` and the system attributes are off for every upp git call.
+        // The player's directory is only a work tree of this clone's `.git`.
+        let clean = temp_clone(repo, &full, "referee-verify")?;
         let cpath = clean.path.clone();
+        let config0 = clone_config(&cpath)?;
         let work = format!("--work-tree={}", wt.path.display());
-        // The player's directory is only a work tree of the clean clone's trusted .git.
+        let tampered = |what: &str| -> Result<(), String> {
+            if clone_config(&cpath)? != config0 {
+                return Err(format!("verify clone was modified ({what})"));
+            }
+            Ok(())
+        };
+        if let Err(why) = tampered("before extraction") {
+            out["point"] = json!(false);
+            out["escalate"] = json!(true);
+            out["status"] = json!("rejected");
+            out["reason"] = json!(why);
+            return Ok(out);
+        }
         git(&cpath, &[&work, "add", "-A"])?;
         // Against the commit, not HEAD: a player that committed still yields its changes.
         let names = git_raw(
@@ -853,6 +935,7 @@ fn run_fix(
                 &full,
             ],
         )?;
+        let bad_link = escaping_symlink(&cpath, &full)?;
         // Reset the clean clone's index; its work tree was never touched.
         git(&cpath, &["read-tree", &full])?;
         out["files"] = json!(files);
@@ -882,13 +965,47 @@ fn run_fix(
                 &mut out,
                 format!("the fix changes protected paths: {}", list.join(", ")),
             );
+        } else if let Some(link) = bad_link {
+            reject(
+                &mut out,
+                format!("patch adds a symlink leaving the repository: {link}"),
+            );
         } else {
-            std::fs::create_dir_all(&fix.patch_dir).map_err(|e| format!("patch dir: {e}"))?;
+            std::fs::DirBuilder::new()
+                .recursive(true)
+                .mode(0o700)
+                .create(&fix.patch_dir)
+                .map_err(|e| format!("patch dir: {e}"))?;
             let file = fix.patch_dir.join(format!(
                 "{short}-{}.patch",
                 &uuid::Uuid::new_v4().simple().to_string()[..8]
             ));
-            std::fs::write(&file, &patch).map_err(|e| format!("write patch: {e}"))?;
+            // The hash is of the bytes upp verifies; the file is read back and must match.
+            let digest = sha256_hex(patch.as_bytes());
+            let write_patch = || -> Result<(), String> {
+                use std::io::Write;
+                let mut f = std::fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .mode(0o600)
+                    .open(&file)
+                    .map_err(|e| format!("write patch: {e}"))?;
+                f.write_all(patch.as_bytes())
+                    .map_err(|e| format!("write patch: {e}"))?;
+                f.sync_all().map_err(|e| format!("write patch: {e}"))?;
+                Ok(())
+            };
+            let reread = || -> Result<(), String> {
+                let back = std::fs::read(&file).map_err(|e| format!("read back patch: {e}"))?;
+                if sha256_hex(&back) != digest {
+                    return Err("patch file does not match the verified bytes".into());
+                }
+                Ok(())
+            };
+            if let Err(e) = write_patch().and_then(|_| reread()) {
+                let _ = std::fs::remove_file(&file);
+                return Err(e);
+            }
             let file_s = file.to_string_lossy().to_string();
             // What the patch really touches must equal the file list that was checked
             // against --protect.
@@ -905,11 +1022,15 @@ fn run_fix(
             let verified = match patched {
                 Err(e) => Err(format!("the patch does not parse: {e}")),
                 Ok(p) if p != listed => Err("patch and file list disagree".to_string()),
+                Ok(_) if tampered("before applying").is_err() => {
+                    Err("verify clone was modified (before applying)".to_string())
+                }
                 Ok(_) => match git(&cpath, &["apply", &file_s]) {
                     Err(e) => Err(format!("the patch does not apply to the commit: {e}")),
                     Ok(_) => {
-                        let (argv, _) = guarded_argv(cmd, guard, &cpath, &env)?;
-                        let run = proc::run(&argv, &cpath, None, &env, timeout)?;
+                        let cenv = ce.install(&cpath)?;
+                        let (argv, _) = guarded_argv(cmd, guard, &cpath, &cenv)?;
+                        let run = proc::run(&argv, &cpath, None, &cenv, timeout)?;
                         if run.ok() {
                             Ok(())
                         } else {
@@ -921,9 +1042,15 @@ fn run_fix(
                     }
                 },
             };
+            let verified = verified.and_then(|_| {
+                reread().inspect_err(|_| {
+                    let _ = std::fs::remove_file(&file);
+                })
+            });
             match verified {
                 Ok(()) => {
                     out["verified"] = json!(true);
+                    out["sha256"] = json!(digest);
                     out["patch"] = json!(file_s);
                 }
                 Err(why) => {
@@ -935,6 +1062,71 @@ fn run_fix(
         }
     }
     Ok(out)
+}
+
+fn clone_config(clone: &Path) -> Result<String, String> {
+    std::fs::read_to_string(clone.join(".git").join("config"))
+        .map_err(|e| format!("verify clone config: {e}"))
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// Whether a symlink at `link` (repository-relative) with `target` points outside the
+/// repository: an absolute target, or `..` components that climb above the root (lexical).
+fn symlink_escapes(link: &str, target: &str) -> bool {
+    if target.starts_with('/') {
+        return true;
+    }
+    let mut stack: Vec<&str> = link.split('/').collect();
+    stack.pop();
+    for c in target.split('/') {
+        match c {
+            "" | "." => {}
+            ".." => {
+                if stack.pop().is_none() {
+                    return true;
+                }
+            }
+            c => stack.push(c),
+        }
+    }
+    false
+}
+
+/// The first symlink (mode 120000) that the staged tree adds or changes against `full` whose
+/// target leaves the repository.
+fn escaping_symlink(cpath: &Path, full: &str) -> Result<Option<String>, String> {
+    let raw = git_raw(
+        cpath,
+        &[
+            "diff",
+            "--cached",
+            "--raw",
+            "-z",
+            "--no-renames",
+            "--no-ext-diff",
+            full,
+        ],
+    )?;
+    let mut it = raw.split('\0').filter(|e| !e.is_empty());
+    while let (Some(meta), Some(path)) = (it.next(), it.next()) {
+        // ":100644 120000 <old> <new> M"
+        let f: Vec<&str> = meta.trim_start_matches(':').split(' ').collect();
+        if f.len() < 5 || f[1] != "120000" {
+            continue;
+        }
+        let target = git_raw(cpath, &["cat-file", "blob", f[3]])?;
+        if symlink_escapes(path, &target) {
+            return Ok(Some(path.to_string()));
+        }
+    }
+    Ok(None)
 }
 
 fn tempfile_dir(full: &str) -> Result<PathBuf, String> {
@@ -1964,5 +2156,250 @@ mod tests {
         // The toolchain dir itself is `.cargo`.
         let got = secret_files(&root.path().join(".cargo"));
         assert_eq!(got, vec![direct]);
+    }
+
+    // ---- review 4: fix-flow hardening ----
+
+    fn off() -> Guard {
+        Guard {
+            sandbox: SandboxMode::Off,
+            ..Default::default()
+        }
+    }
+
+    fn sha256sum(path: &str) -> String {
+        let o = Command::new("sha256sum").arg(path).output().unwrap();
+        String::from_utf8_lossy(&o.stdout)
+            .split_whitespace()
+            .next()
+            .unwrap()
+            .to_string()
+    }
+
+    #[test]
+    fn a_player_cannot_get_a_filter_run_by_upps_extraction() {
+        let d = repo();
+        // A commit of its own (a unique sha), so the player's glob below cannot reach the
+        // clones of tests running in parallel.
+        std::fs::write(d.path().join("uniq.txt"), uuid::Uuid::new_v4().to_string()).unwrap();
+        git_in(d.path(), &["add", "-A"]);
+        git_in(d.path(), &["commit", "-qm", "unique"]);
+        let head = crate::git::git(d.path(), &["rev-parse", "HEAD"], &BTreeMap::new()).unwrap();
+        let short = &head[..12];
+        let patches = tempfile::tempdir().unwrap();
+        let marks = tempfile::tempdir().unwrap();
+        let marker = marks.path().join("filter-ran");
+        let m = marker.display();
+        // The player writes a clean filter into every referee-verify dir it can find and
+        // selects it for every file.
+        let player = format!(
+            "for d in ../referee-verify-{short}-*; do printf '[filter \"pwn\"]\n\tclean = touch {m}\n' >> \"$d/.git/config\"; done; \
+             printf '* filter=pwn\n' > .gitattributes; printf '9\\n' > v.txt; echo done"
+        );
+        for g in [off(), Guard::default()] {
+            let opts = fix_opts(&player, 1, patches.path());
+            let v = check_and_fix(
+                d.path(),
+                "HEAD",
+                "grep -qx 9 v.txt",
+                Duration::from_secs(20),
+                Some(&opts),
+                &g,
+            )
+            .unwrap();
+            assert_eq!(v["fix"]["point"], true, "{v}");
+            assert!(!marker.exists(), "a planted clean filter ran in upp's git");
+        }
+    }
+
+    #[test]
+    fn the_patch_carries_its_sha256_and_is_private() {
+        let d = repo();
+        let base = tempfile::tempdir().unwrap();
+        let patches = base.path().join("new/patches");
+        let opts = fix_opts("printf '9\\n' > v.txt; echo fixed", 1, &patches);
+        let v = check_and_fix(
+            d.path(),
+            "HEAD",
+            "grep -qx 9 v.txt",
+            Duration::from_secs(20),
+            Some(&opts),
+            &Guard::default(),
+        )
+        .unwrap();
+        let file = v["fix"]["patch"].as_str().unwrap();
+        assert_eq!(v["fix"]["sha256"], json!(sha256sum(file)), "{v}");
+        assert_eq!(v["fix"]["files"], json!(["v.txt"]), "{v}");
+        let mode = |p: &Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode(Path::new(file)), 0o600);
+        assert_eq!(mode(&patches), 0o700);
+    }
+
+    fn big_repo(names: &[String]) -> tempfile::TempDir {
+        let d = repo();
+        for n in names {
+            let p = d.path().join(n);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, "x").unwrap();
+        }
+        git_in(d.path(), &["add", "-A"]);
+        git_in(d.path(), &["commit", "-qm", "many"]);
+        d
+    }
+
+    #[test]
+    fn a_commit_with_1500_long_paths_can_be_refereed() {
+        let names: Vec<String> = (0..1500)
+            .map(|i| format!("dir{i:04}/{}{i:04}.txt", "n".repeat(110)))
+            .collect();
+        assert!(names.iter().map(|n| n.len() + 1).sum::<usize>() > 128 * 1024);
+        let d = big_repo(&names);
+        let cmd = "[ -z \"${UPP_CHANGED_PATHS+x}\" ] && [ \"$UPP_CHANGED_PATHS_TRUNCATED\" = 1 ] \
+                   && [ \"$(tr -cd '\\000' < \"$UPP_CHANGED_PATHS_FILE\" | wc -c)\" = 1500 ] \
+                   && tr '\\000' '\\n' < \"$UPP_CHANGED_PATHS_FILE\" | sort -c \
+                   && [ \"$(tr '\\000' '\\n' < \"$UPP_CHANGED_PATHS_FILE\" | head -n 1)\" = dir0000/$(printf 'n%.0s' $(seq 110))0000.txt ]";
+        for g in [off(), bw()] {
+            if g.sandbox == SandboxMode::Bwrap && !bwrap_works() {
+                continue;
+            }
+            let v = check_commit_with(d.path(), "HEAD", cmd, Duration::from_secs(60), &g).unwrap();
+            assert_eq!(v["point"], true, "{v}");
+        }
+    }
+
+    #[test]
+    fn a_file_name_with_a_newline_is_one_nul_separated_entry() {
+        let d = big_repo(&["a\nb".to_string()]);
+        let cmd = "[ -z \"${UPP_CHANGED_PATHS+x}\" ] && [ \"$UPP_CHANGED_PATHS_TRUNCATED\" = 1 ] \
+                   && [ \"$(tr '\\000' '@' < \"$UPP_CHANGED_PATHS_FILE\")\" = \"$(printf 'a\\nb@')\" ]";
+        for g in [off(), bw()] {
+            if g.sandbox == SandboxMode::Bwrap && !bwrap_works() {
+                continue;
+            }
+            let v = check_commit_with(d.path(), "HEAD", cmd, Duration::from_secs(30), &g).unwrap();
+            assert_eq!(v["point"], true, "{v}");
+        }
+        // A small list without newlines keeps the text variable and the file.
+        let d = repo();
+        let v = check_commit_with(
+            d.path(),
+            "HEAD",
+            "[ \"$UPP_CHANGED_PATHS\" = v.txt ] && [ -z \"${UPP_CHANGED_PATHS_TRUNCATED+x}\" ] \
+             && [ \"$(tr '\\000' '@' < \"$UPP_CHANGED_PATHS_FILE\")\" = v.txt@ ]",
+            Duration::from_secs(30),
+            &off(),
+        )
+        .unwrap();
+        assert_eq!(v["point"], true, "{v}");
+    }
+
+    #[test]
+    fn the_changed_paths_file_is_read_only_in_the_sandbox() {
+        if skip() {
+            return;
+        }
+        let d = repo();
+        let v = check_commit_with(
+            d.path(),
+            "HEAD",
+            "! ( echo x > \"$UPP_CHANGED_PATHS_FILE\" ) 2>/dev/null && [ \"$(tr '\\000' '@' < \"$UPP_CHANGED_PATHS_FILE\")\" = v.txt@ ]",
+            Duration::from_secs(30),
+            &bw(),
+        )
+        .unwrap();
+        assert_eq!(v["point"], true, "{v}");
+    }
+
+    #[test]
+    fn dev_shm_is_size_limited_in_the_sandbox() {
+        if skip() || !bwrap_sizes() {
+            eprintln!("skipped: no bwrap or no --size support");
+            return;
+        }
+        let d = repo();
+        let v = check_commit_with(
+            d.path(),
+            "HEAD",
+            "dd if=/dev/zero of=/dev/shm/small bs=1M count=10 2>/dev/null && rm /dev/shm/small && ! dd if=/dev/zero of=/dev/shm/big bs=1M count=400 2>/dev/null",
+            Duration::from_secs(60),
+            &bw(),
+        )
+        .unwrap();
+        assert_eq!(v["point"], true, "{v}");
+    }
+
+    #[test]
+    fn symlink_targets_are_judged_lexically() {
+        assert!(symlink_escapes("l", "/etc/passwd"));
+        assert!(symlink_escapes("l", "../x"));
+        assert!(symlink_escapes("d/l", "../../x"));
+        assert!(symlink_escapes("d/l", "e/../../../x"));
+        assert!(!symlink_escapes("d/l", "../x"));
+        assert!(!symlink_escapes("d/l", "./e/../f"));
+        assert!(!symlink_escapes("l", "v.txt"));
+    }
+
+    #[test]
+    fn a_fix_that_adds_a_symlink_out_of_the_repository_is_rejected() {
+        let d = repo();
+        let patches = tempfile::tempdir().unwrap();
+        for (player, bad) in [
+            ("ln -s /etc/passwd link", Some("link")),
+            ("mkdir -p a/b; ln -s ../../../x a/b/link", Some("a/b/link")),
+            ("ln -s ../../x link", Some("link")),
+            ("mkdir -p a/b; ln -s ../../v.txt a/b/ok", None),
+            ("ln -s v.txt ok", None),
+        ] {
+            let opts = fix_opts(
+                &format!("{player}; printf '9\\n' > v.txt; echo done"),
+                1,
+                patches.path(),
+            );
+            let v = check_and_fix(
+                d.path(),
+                "HEAD",
+                "grep -qx 9 v.txt",
+                Duration::from_secs(20),
+                Some(&opts),
+                &off(),
+            )
+            .unwrap();
+            match bad {
+                Some(p) => {
+                    assert_eq!(v["fix"]["point"], false, "{player}: {v}");
+                    assert_eq!(v["fix"]["status"], "rejected", "{player}: {v}");
+                    assert_eq!(
+                        v["fix"]["reason"],
+                        json!(format!("patch adds a symlink leaving the repository: {p}")),
+                        "{player}: {v}"
+                    );
+                    assert!(v["fix"]["patch"].is_null());
+                }
+                None => assert_eq!(v["fix"]["verified"], true, "{player}: {v}"),
+            }
+        }
+    }
+
+    #[test]
+    fn make_removable_does_not_follow_a_symlink() {
+        let d = tempfile::tempdir().unwrap();
+        let target = d.path().join("target");
+        std::fs::create_dir(&target).unwrap();
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o500)).unwrap();
+        let link = d.path().join("link");
+        std::os::unix::fs::symlink(&target, &link).unwrap();
+        make_removable(&link);
+        let mode = std::fs::metadata(&target).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o500);
+        // A real directory with mode 000 is still opened and fixed.
+        let hard = d.path().join("hard");
+        std::fs::create_dir_all(hard.join("e")).unwrap();
+        std::fs::set_permissions(&hard, std::fs::Permissions::from_mode(0o000)).unwrap();
+        make_removable(&hard);
+        assert_eq!(
+            std::fs::metadata(&hard).unwrap().permissions().mode() & 0o700,
+            0o700
+        );
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o700)).unwrap();
     }
 }

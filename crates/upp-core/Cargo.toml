@@ -19,6 +19,8 @@ rusqlite.workspace = true
 regex.workspace = true
 uuid.workspace = true
 ureq.workspace = true
+sha2 = "0.10"
+libc = "0.2"
 
 [dev-dependencies]
 tempfile.workspace = true

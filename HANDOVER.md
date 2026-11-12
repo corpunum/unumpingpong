@@ -39,8 +39,18 @@ Update this file with every change that alters state, open work or how to ship. 
   (`--depth 2`); checks get `UPP_SHA`, `UPP_BASE_SHA`, `UPP_CHANGED_PATHS`.
 - Security reviews: the first failed. The second passed check-only mode but failed the fix flow
   (template injection through the check command; the brief asked the player to run the check).
-  Fixed in this bundle; the third review is pending.
-- Automatic fix runs in the ship queue stay disabled until the third review passes.
+  The third: the fix flow passes with conditions: the player's sandbox must not reach the referee
+  temp dir or the patch dir, and the verify clone must be created after the player. Both are
+  addressed or required in this bundle (the clone is created after the table and its git config is
+  compared; `fix.sha256` lets the applier detect a changed patch; a sandboxed player that binds
+  only its own work dir is still required and does not exist yet). A fourth review of these fixes
+  is pending.
+- Automatic fix runs in the ship queue stay disabled until the per-worker sandbox exists.
+- Known gap: the table engine's own git (`git::provenance`, `git add -A` in the player's
+  directory) uses the player's clone config, so a `filter.*.clean` planted by an unsandboxed
+  player in its own clone runs there. Fixed only by sandboxing the player.
+- Verdict text (`fix.files`, `diffstat`, `reason`, `output`) is untrusted: fence it before a
+  model reads it. Credential masking is a name heuristic to depth 2.
 
 ## How to ship
 

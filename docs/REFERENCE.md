@@ -234,6 +234,13 @@ against the commit, and `fix.point` is true only when that patch passes the chec
 checkout (`fix.verified`) and touches no `--protect PATH` (name the tests and the check script; `./tests/` = `tests`, absolute paths and `..` are refused; a file moved out of a protected directory counts as touched).
 `fix.files` lists what it changes. Review the patch before applying it.
 
+`fix.sha256` is the hex SHA-256 of the patch file's bytes, taken from the bytes upp verified; upp
+writes the file (mode 0600, in a patch dir it creates 0700), reads it back and fails the fix if the
+hash differs. The file sits in a directory that other processes of yours may write, so **an applier
+must check that the sha256 of the file equals `fix.sha256` before `git apply`** (for example
+`echo "$SHA  $PATCH" | sha256sum -c -`). A fix whose patch adds or changes a symlink (mode 120000)
+with an absolute target, or one that climbs out of the repository with `..`, is rejected.
+
 Checks are confined with bubblewrap by default (`--sandbox auto`; `bwrap` = required, `none` =
 off). Profile 2 is an allowlist: all namespaces unshared, system read-only, empty `/run`, `/tmp`,
 `/var/tmp` and `$HOME`, a cleared environment (only PATH, HOME, USER, LOGNAME, LANG, LC_ALL, TERM,
@@ -252,19 +259,35 @@ The clone is a new repository fetched with `--depth 2`: it holds the commit and 
 no other branch, tag or unreferenced object of your repository. `git diff HEAD^ HEAD` works,
 `git diff HEAD~5` or `git log` further back do not (a root commit has no `HEAD^`). The check also
 gets `UPP_SHA` (full sha), `UPP_BASE_SHA` (first parent's full sha, empty for a root commit) and
-`UPP_CHANGED_PATHS` (newline-separated paths of `git diff --name-only --no-renames BASE SHA`,
-computed by upp in your repository; for a root commit, all its files), sandboxed or not, in the
-fix table's referee run and in the verify run too. Each sandbox tmpfs has a size limit (64 MiB for
-`/run`, 2 GiB for `/tmp` and `/var/tmp`, 256 MiB for `$HOME`) on bubblewrap 0.9+.
+the paths the commit changes (`git diff --name-only -z --no-renames BASE SHA`, computed by upp in
+your repository; for a root commit, all its files), sandboxed or not, in the fix table's referee
+run and in the verify run too. The list is always in `UPP_CHANGED_PATHS_FILE`: the absolute path
+of `.git/upp-changed-paths` in the check's clone, NUL-terminated entries (read-only to the check
+in the sandbox). `UPP_CHANGED_PATHS` (newline-separated) is set only when the text is at most
+32 KiB and no name contains a newline; otherwise it is unset and `UPP_CHANGED_PATHS_TRUNCATED=1`
+(one environment string over 128 KiB would make `execve` fail). Use the file for big commits.
+
+Sandbox limits on bubblewrap 0.9+ (`--size`): `/dev/shm` 256 MiB, `/run` and `/var/run` 64 MiB
+each, `/tmp` and `/var/tmp` 2 GiB each, `$HOME` 256 MiB. On older bubblewrap these tmpfs mounts
+are unlimited (`/dev/shm` is then a plain tmpfs). The checkout itself lives on the host disk and
+has no size cap, memory has no cap, and there is no process or CPU limit: only the timeout bounds
+a run.
 
 The fix brief shows the check command only as a fenced, untrusted block, and tells the player not
 to run it: the referee runs the check after the answer and returns the output.
 
 Not covered:
 
-- The fix player itself is not sandboxed (it runs as you), so `verified` is not independent of
-  the player: it can change the toolchain directories the verify run reads (`~/.local/bin`,
-  `~/.cargo`, ...). Run the player in a sandbox for an independent result.
+- The fix player itself is not sandboxed (it runs as you): it can change everything you can
+  write, that is the toolchain directories the verify run reads (`~/.local/bin`, `~/.cargo`,
+  ...), the referee temp dir (including the verify clone, though that is created only after the
+  player has ended and upp compares its git config before extracting) and the patch dir. So
+  `verified` and the patch file are trustworthy only when the player runs in a sandbox that binds
+  nothing but its own work dir. An applier must check `fix.sha256` (below) before applying.
+- `fix.files`, `fix.diffstat`, `reason` and `output` in the verdict are untrusted text (file names
+  and check output come from the code under test): fence them before a model reads them.
+- Credential masking is a name heuristic to depth 2; private keys with unusual names are not
+  masked.
 - File systems outside `$HOME` (for example `/etc`, `/var`, other mounts) stay readable inside the
   sandbox; with `--net` anything readable can be sent out.
 - `--net` shares the host network namespace, including abstract unix sockets (for example X11), so

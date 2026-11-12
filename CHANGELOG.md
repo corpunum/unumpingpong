@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- Fourth security review fixes (fix flow). The clean verify clone is created only after the fix
+  table has ended, its git config is compared with what `git init` + fetch wrote (a difference
+  fails the fix with "verify clone was modified"), and every upp git call sets
+  `core.attributesFile=/dev/null` and `GIT_ATTR_NOSYSTEM=1`, so a player cannot get a
+  `filter.*.clean` command run by upp's `git add -A`. The verdict's `fix` gains `sha256` of the
+  patch file (the applier must check it); the patch file is mode 0600 and a patch dir upp creates
+  0700. `UPP_CHANGED_PATHS` no longer breaks big commits: the list is in
+  `UPP_CHANGED_PATHS_FILE` (NUL-terminated, `.git/upp-changed-paths` of the clone), and
+  `UPP_CHANGED_PATHS` is set only when it is at most 32 KiB without a newline in a name, else
+  `UPP_CHANGED_PATHS_TRUNCATED=1`. The sandbox mounts a 256 MiB tmpfs on `/dev/shm`. A fix that adds
+  a symlink with an absolute or repository-escaping target is rejected. `make_removable` opens
+  directories with `O_NOFOLLOW | O_DIRECTORY` (`O_PATH`) so a swapped symlink is not followed. New
+  dependencies of upp-core: `sha2`, `libc`.
+- Not covered, corrected: the unsandboxed fix player can change everything the user can write
+  (toolchain dirs, the referee temp dir including the verify clone, the patch dir), so `verified`
+  and the patch file are trustworthy only when the player runs in a sandbox that binds nothing but
+  its own work dir; the applier must check `fix.sha256`. `fix.files`, `diffstat`, `reason` and
+  `output` are untrusted text to fence before a model reads them. Credential masking is a name
+  heuristic to depth 2 (private keys with unusual names are not masked).
 - **Referee hardening, sandbox profile 2** (security review 11-12). Checks run under an
   allowlist profile: all namespaces unshared (`--unshare-all`, network shared back only with
   `--net`), the system read-only, empty tmpfs `/run`, `/var/run`, `/tmp`, `/var/tmp` and `$HOME`
