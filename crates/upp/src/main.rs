@@ -179,7 +179,8 @@ fn parse_args() -> Result<Args, String> {
                 )
             }
             Long(
-                k @ ("next" | "parent" | "into" | "check" | "table" | "repo" | "sha" | "player"),
+                k @ ("next" | "parent" | "into" | "check" | "table" | "repo" | "sha" | "player"
+                | "protect"),
             ) => {
                 let k = k.to_string();
                 let v = p

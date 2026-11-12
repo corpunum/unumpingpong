@@ -715,3 +715,120 @@ fn a_merge_conflict_returns_the_ball_and_keeps_the_parent_files() {
         String::from_utf8_lossy(&s.stdout)
     );
 }
+
+/// `upp referee` end to end: exit codes, and every `--fix` flag reaches the parser
+/// (`--protect` was in the help but refused by the parser, 2026-11-12).
+#[test]
+fn referee_checks_a_commit_and_rejects_a_cheating_fix() {
+    let d = tempfile::tempdir().unwrap();
+    let git = |args: &[&str]| {
+        assert!(Command::new("git")
+            .args(args)
+            .current_dir(d.path())
+            .env("GIT_AUTHOR_NAME", "t")
+            .env("GIT_AUTHOR_EMAIL", "t@example.invalid")
+            .env("GIT_COMMITTER_NAME", "t")
+            .env("GIT_COMMITTER_EMAIL", "t@example.invalid")
+            .status()
+            .unwrap()
+            .success())
+    };
+    git(&["init", "-q"]);
+    std::fs::write(d.path().join("v.txt"), "1\n").unwrap();
+    std::fs::write(d.path().join("check.sh"), "grep -qx 9 v.txt\n").unwrap();
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "one"]);
+    let repo = d.path().to_string_lossy().to_string();
+    let patches = tempfile::tempdir().unwrap();
+    let pdir = patches.path().to_string_lossy().to_string();
+
+    let pass = upp()
+        .args([
+            "referee",
+            "--repo",
+            &repo,
+            "--sha",
+            "HEAD",
+            "--json",
+            "--",
+            "grep -qx 1 v.txt",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(pass.status.code(), Some(0));
+    let bad = upp()
+        .args(["referee", "--repo", &repo, "--sha", "nope", "--", "true"])
+        .output()
+        .unwrap();
+    assert_eq!(bad.status.code(), Some(2));
+
+    // A player that rewrites the check script: rejected, exit 1, no patch.
+    let cheat = upp()
+        .args([
+            "referee",
+            "--repo",
+            &repo,
+            "--sha",
+            "HEAD",
+            "--json",
+            "--timeout",
+            "20",
+        ])
+        .args([
+            "--fix",
+            "1",
+            "--fix-wall",
+            "60",
+            "--patch-dir",
+            &pdir,
+            "--protect",
+            "check.sh",
+        ])
+        .args([
+            "--player",
+            r#"{"kind":"shell","command":"echo true > check.sh; echo done"}"#,
+        ])
+        .args(["--", "sh check.sh"])
+        .output()
+        .unwrap();
+    assert_eq!(
+        cheat.status.code(),
+        Some(1),
+        "{}",
+        String::from_utf8_lossy(&cheat.stderr)
+    );
+    let v: Value = serde_json::from_slice(&cheat.stdout).unwrap();
+    assert_eq!(v["fix"]["point"], false, "{v}");
+    assert!(v["fix"]["reason"]
+        .as_str()
+        .unwrap()
+        .contains("protected paths: check.sh"));
+    assert_eq!(std::fs::read_dir(patches.path()).unwrap().count(), 0);
+
+    // An honest fix: still exit 1 (the commit failed), with a verified patch.
+    let fix = upp()
+        .args([
+            "referee",
+            "--repo",
+            &repo,
+            "--sha",
+            "HEAD",
+            "--json",
+            "--timeout",
+            "20",
+        ])
+        .args(["--fix", "2", "--patch-dir", &pdir, "--protect", "check.sh"])
+        .args([
+            "--player",
+            r#"{"kind":"shell","command":"echo 9 > v.txt; echo done"}"#,
+        ])
+        .args(["--", "sh check.sh"])
+        .output()
+        .unwrap();
+    assert_eq!(fix.status.code(), Some(1));
+    let v: Value = serde_json::from_slice(&fix.stdout).unwrap();
+    assert_eq!(v["point"], false);
+    assert_eq!(v["fix"]["point"], true, "{v}");
+    assert_eq!(v["fix"]["verified"], true);
+    assert!(std::path::Path::new(v["fix"]["patch"].as_str().unwrap()).exists());
+}
