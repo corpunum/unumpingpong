@@ -223,6 +223,12 @@ worktree of the commit (removed afterwards), so only committed files count. The 
 Exit 0 = point, 1 = no point, 2 = could not run (not a repository, unknown commit). A ship pipeline
 calls it before a commit joins a bundle and stores the verdict with the queue entry.
 
+`--fix N [--player JSON] [--fix-wall SECS]` adds a bounded repair step after a failed check: a
+player gets at most N rallies in its own temp worktree, refereed by the same command. If it scores,
+`fix.patch` names the patch file (apply it with `git apply`); otherwise `fix.escalate` is true and
+the entry goes to a human or the orchestrator. The commit's `point` and the exit code (1) do not
+change: a fix is a proposal, not a pass.
+
 ## Server modes
 
 - `auto` (default): referee pass = point; fail = return with the referee output.

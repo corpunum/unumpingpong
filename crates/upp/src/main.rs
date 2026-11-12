@@ -41,6 +41,12 @@ COMMANDS:
                             Run a check command against a commit in a temp detached
                             worktree (no model); print the JSON verdict; exit 0 = point,
                             1 = no point, 2 = could not run. For ship pipelines.
+      --fix N                 On a failed check, give a player at most N (≤5) rallies in a
+                              separate temp worktree; a scoring fix is saved as a patch
+                              (~/.local/share/unumpingpong/fixes), never committed. The
+                              commit's verdict stays point=false; `fix` reports the outcome
+      --player JSON           The fix player (PlayerSpec JSON); default {\"kind\":\"openunum\"}
+      --fix-wall SECS         Wall budget of the fix (default 1800)
   pending                   Balls waiting for an external server (JSON)
   answer <table> <accept|return|stop> [note...] [--next BALL]
                             Answer a ball as the external server; --next chains a table
@@ -97,6 +103,9 @@ struct Args {
     repo: Option<String>,
     sha: Option<String>,
     timeout: Option<u64>,
+    fix: Option<u32>,
+    fix_wall: Option<u64>,
+    player: Option<String>,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -138,6 +147,22 @@ fn parse_args() -> Result<Args, String> {
                         .map_err(|e| format!("--wait: {e}"))?,
                 )
             }
+            Long("fix") => {
+                a.fix = Some(
+                    p.value()
+                        .map_err(|e| e.to_string())?
+                        .parse()
+                        .map_err(|e| format!("--fix: {e}"))?,
+                )
+            }
+            Long("fix-wall") => {
+                a.fix_wall = Some(
+                    p.value()
+                        .map_err(|e| e.to_string())?
+                        .parse()
+                        .map_err(|e| format!("--fix-wall: {e}"))?,
+                )
+            }
             Long("timeout") => {
                 a.timeout = Some(
                     p.value()
@@ -146,7 +171,9 @@ fn parse_args() -> Result<Args, String> {
                         .map_err(|e| format!("--timeout: {e}"))?,
                 )
             }
-            Long(k @ ("next" | "parent" | "into" | "check" | "table" | "repo" | "sha")) => {
+            Long(
+                k @ ("next" | "parent" | "into" | "check" | "table" | "repo" | "sha" | "player"),
+            ) => {
                 let k = k.to_string();
                 let v = p
                     .value()
@@ -160,6 +187,7 @@ fn parse_args() -> Result<Args, String> {
                     "check" => a.check = Some(v),
                     "repo" => a.repo = Some(v),
                     "sha" => a.sha = Some(v),
+                    "player" => a.player = Some(v),
                     _ => a.tables.push(v),
                 }
             }
@@ -214,7 +242,22 @@ fn cmd_referee(a: &Args) -> Result<(), String> {
     let repo = PathBuf::from(a.repo.clone().unwrap_or_else(|| ".".into()));
     let sha = a.sha.clone().unwrap_or_else(|| "HEAD".into());
     let timeout = std::time::Duration::from_secs(a.timeout.unwrap_or(1200));
-    let v = upp_core::commit_check::check_commit(&repo, &sha, &cmd, timeout)?;
+    let fix = match a.fix {
+        Some(n) if n > 0 => {
+            let player: Value =
+                serde_json::from_str(a.player.as_deref().unwrap_or(r#"{"kind":"openunum"}"#))
+                    .map_err(|e| format!("--player: invalid JSON: {e}"))?;
+            let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+            Some(upp_core::commit_check::FixOpts {
+                rallies: n.min(5),
+                player,
+                wall: std::time::Duration::from_secs(a.fix_wall.unwrap_or(1800)),
+                patch_dir: PathBuf::from(home).join(".local/share/unumpingpong/fixes"),
+            })
+        }
+        _ => None,
+    };
+    let v = upp_core::commit_check::check_and_fix(&repo, &sha, &cmd, timeout, fix.as_ref())?;
     if a.json {
         println!("{v}");
     } else {
