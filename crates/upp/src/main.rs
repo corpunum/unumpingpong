@@ -47,6 +47,8 @@ COMMANDS:
                               commit's verdict stays point=false; `fix` reports the outcome
       --player JSON           The fix player (PlayerSpec JSON); default {\"kind\":\"openunum\"}
       --fix-wall SECS         Wall budget of the fix (default 1800)
+      --patch-dir DIR         Where a scoring fix's patch is written
+                              (default ~/.local/share/unumpingpong/fixes)
   pending                   Balls waiting for an external server (JSON)
   answer <table> <accept|return|stop> [note...] [--next BALL]
                             Answer a ball as the external server; --next chains a table
@@ -106,6 +108,7 @@ struct Args {
     fix: Option<u32>,
     fix_wall: Option<u64>,
     player: Option<String>,
+    patch_dir: Option<PathBuf>,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -155,6 +158,7 @@ fn parse_args() -> Result<Args, String> {
                         .map_err(|e| format!("--fix: {e}"))?,
                 )
             }
+            Long("patch-dir") => a.patch_dir = Some(p.value().map_err(|e| e.to_string())?.into()),
             Long("fix-wall") => {
                 a.fix_wall = Some(
                     p.value()
@@ -252,7 +256,10 @@ fn cmd_referee(a: &Args) -> Result<(), String> {
                 rallies: n.min(5),
                 player,
                 wall: std::time::Duration::from_secs(a.fix_wall.unwrap_or(1800)),
-                patch_dir: PathBuf::from(home).join(".local/share/unumpingpong/fixes"),
+                patch_dir: a
+                    .patch_dir
+                    .clone()
+                    .unwrap_or_else(|| PathBuf::from(home).join(".local/share/unumpingpong/fixes")),
             })
         }
         _ => None,

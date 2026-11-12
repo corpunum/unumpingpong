@@ -6,7 +6,7 @@
   player (default `{"kind":"openunum"}`, i.e. OpenUnum's main local model; `--player` takes any
   PlayerSpec JSON) gets at most N rallies (capped at 5; the orchestrator rule is 2) in a separate
   temp worktree to make the same check pass. A scoring fix is written as a patch to
-  `~/.local/share/unumpingpong/fixes/` for a human or the orchestrator; nothing is committed or
+  `~/.local/share/unumpingpong/fixes/` (or `--patch-dir`) for a human or the orchestrator; nothing is committed or
   shipped, and the commit's own verdict stays `point: false`. The verdict gains
   `fix: {point, rallies, maxRallies, status, reason, player, escalate, patch, diffstat}`.
 - **`upp referee`**: referee a commit without a model. `upp referee --repo DIR --sha SHA
