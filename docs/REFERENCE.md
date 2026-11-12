@@ -229,6 +229,12 @@ player gets at most N rallies in its own temp worktree, refereed by the same com
 the entry goes to a human or the orchestrator. The commit's `point` and the exit code (1) do not
 change: a fix is a proposal, not a pass.
 
+What a fix must survive: the player works in an isolated clone (own `.git`), the patch is the diff
+against the commit, and `fix.point` is true only when that patch passes the check on a clean
+checkout (`fix.verified`) and touches no `--protect PATH` (name the tests and the check script).
+`fix.files` lists what it changes. There is no sandbox: player and check run as the calling user,
+so review the patch before applying it.
+
 ## Server modes
 
 - `auto` (default): referee pass = point; fail = return with the referee output.

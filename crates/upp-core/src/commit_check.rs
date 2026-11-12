@@ -20,14 +20,20 @@ pub const VERDICT_VERSION: u32 = 1;
 const OUTPUT_HEAD: usize = 1000;
 const OUTPUT_TAIL: usize = 1000;
 
-/// A detached worktree that is removed when dropped, even on an early return.
+/// A throwaway checkout that is removed when dropped, even on an early return: a detached
+/// worktree of the repository (check mode), or an isolated clone (fix mode).
 struct TempWorktree {
     repo: PathBuf,
     path: PathBuf,
+    clone: bool,
 }
 
 impl Drop for TempWorktree {
     fn drop(&mut self) {
+        if self.clone {
+            let _ = std::fs::remove_dir_all(&self.path);
+            return;
+        }
         let p = self.path.to_string_lossy().to_string();
         if crate::git::git(
             &self.repo,
@@ -68,7 +74,43 @@ fn temp_worktree(repo: &Path, full: &str, kind: &str) -> Result<TempWorktree, St
     Ok(TempWorktree {
         repo: repo.to_path_buf(),
         path: dir,
+        clone: false,
     })
+}
+
+/// An isolated clone of `repo` checked out at `full`, for a player to work in. It has its own
+/// `.git` (refs, config, hooks, index): a player that commits, branches or reconfigures git
+/// there cannot touch the real repository. Objects are borrowed (`--shared`), so it is cheap.
+fn temp_clone(repo: &Path, full: &str, kind: &str) -> Result<TempWorktree, String> {
+    let dir = std::env::temp_dir().join("unumpingpong").join(format!(
+        "{kind}-{}-{}",
+        &full[..12.min(full.len())],
+        &uuid::Uuid::new_v4().simple().to_string()[..8]
+    ));
+    std::fs::create_dir_all(dir.parent().unwrap_or(Path::new(".")))
+        .map_err(|e| format!("temp dir: {e}"))?;
+    let none = BTreeMap::new();
+    let top = crate::git::git(repo, &["rev-parse", "--show-toplevel"], &none)?;
+    let path_s = dir.to_string_lossy().to_string();
+    crate::git::git(
+        repo,
+        &[
+            "clone",
+            "--quiet",
+            "--shared",
+            "--no-checkout",
+            &top,
+            &path_s,
+        ],
+        &none,
+    )?;
+    let wt = TempWorktree {
+        repo: repo.to_path_buf(),
+        path: dir,
+        clone: true,
+    };
+    crate::git::git(&wt.path, &["checkout", "--quiet", "--detach", full], &none)?;
+    Ok(wt)
 }
 
 /// Run `cmd` (a shell line) in a fresh detached worktree of `sha` in `repo`, with `timeout`.
@@ -77,6 +119,9 @@ fn temp_worktree(repo: &Path, full: &str, kind: &str) -> Result<TempWorktree, St
 pub fn check_commit(repo: &Path, sha: &str, cmd: &str, timeout: Duration) -> Result<Value, String> {
     if cmd.trim().is_empty() {
         return Err("empty check command".into());
+    }
+    if sha.starts_with('-') {
+        return Err(format!("unknown commit {sha}: not a revision"));
     }
     let none = BTreeMap::new();
     let full = crate::git::git(
@@ -114,6 +159,9 @@ pub struct FixOpts {
     pub wall: Duration,
     /// Where a scoring fix's patch is written.
     pub patch_dir: PathBuf,
+    /// Paths (files or directories, relative to the repository) a fix must not change, e.g.
+    /// the tests and the check script. A fix that touches one is rejected.
+    pub protect: Vec<String>,
 }
 
 /// Neutralise ball template tokens inside embedded text (only these two are expanded).
@@ -153,13 +201,22 @@ fn run_fix(
     fix: &FixOpts,
 ) -> Result<Value, String> {
     let full = v["sha"].as_str().unwrap_or_default().to_string();
-    let wt = temp_worktree(repo, &full, "referee-fix")?;
+    // An isolated clone, not a worktree: the player gets its own .git.
+    let wt = temp_clone(repo, &full, "referee-fix")?;
+    let protected = if fix.protect.is_empty() {
+        String::new()
+    } else {
+        format!(
+            " Do not change these paths (a fix that touches them is rejected): {}.",
+            fix.protect.join(", ")
+        )
+    };
     let ball = format!(
         "This commit fails its referee check. Make the check pass by fixing the code.\n\n\
          Working directory: {cwd}\nCheck command (run it yourself; it must exit 0): `{cmd}`\n\n\
          Current failure (head and tail):\n```\n{out}\n```\n\n\
          Rules: work only in the working directory. Do not commit, push or create branches. \
-         Do not weaken or delete tests or the check to make it pass. If the check command itself \
+         Do not weaken or delete tests or the check to make it pass.{protected} If the check command itself \
          is broken (command or file not found), answer at once and say so. \
          End with what you changed and the check output.",
         cwd = wt.path.display(),
@@ -205,18 +262,86 @@ fn run_fix(
         "patch": Value::Null,
     });
     if point {
+        // The table's point only says the check passed in the player's directory. A fix counts
+        // when its PATCH, applied to a clean checkout of the commit, passes the check, and it
+        // leaves the protected paths alone.
         let none = BTreeMap::new();
         crate::git::git(&wt.path, &["add", "-A"], &none)?;
-        let stat = crate::git::git(&wt.path, &["diff", "--cached", "--stat", "HEAD"], &none)?;
-        let patch = crate::git::git(&wt.path, &["diff", "--cached", "--binary", "HEAD"], &none)?;
-        std::fs::create_dir_all(&fix.patch_dir).map_err(|e| format!("patch dir: {e}"))?;
-        let file = fix.patch_dir.join(format!(
-            "{short}-{}.patch",
-            &uuid::Uuid::new_v4().simple().to_string()[..8]
-        ));
-        std::fs::write(&file, format!("{patch}\n")).map_err(|e| format!("write patch: {e}"))?;
-        out["patch"] = json!(file.to_string_lossy());
+        // Against the commit, not HEAD: a player that committed still yields its changes.
+        let files = crate::git::git(&wt.path, &["diff", "--cached", "--name-only", &full], &none)?;
+        let files: Vec<String> = files
+            .lines()
+            .map(str::to_string)
+            .filter(|l| !l.is_empty())
+            .collect();
+        let stat = crate::git::git(&wt.path, &["diff", "--cached", "--stat", &full], &none)?;
+        let patch = crate::git::git(&wt.path, &["diff", "--cached", "--binary", &full], &none)?;
+        out["files"] = json!(files);
         out["diffstat"] = json!(stat);
+        let touched: Vec<&String> = files
+            .iter()
+            .filter(|f| {
+                fix.protect.iter().any(|p| {
+                    let p = p.trim_end_matches('/');
+                    !p.is_empty() && (f.as_str() == p || f.starts_with(&format!("{p}/")))
+                })
+            })
+            .collect();
+        let reject = |out: &mut Value, why: String| {
+            out["point"] = json!(false);
+            out["escalate"] = json!(true);
+            out["status"] = json!("rejected");
+            out["reason"] = json!(why);
+        };
+        if files.is_empty() {
+            reject(
+                &mut out,
+                "the check passed without any change (flaky check?)".into(),
+            );
+        } else if !touched.is_empty() {
+            let list: Vec<&str> = touched.iter().map(|s| s.as_str()).collect();
+            reject(
+                &mut out,
+                format!("the fix changes protected paths: {}", list.join(", ")),
+            );
+        } else {
+            std::fs::create_dir_all(&fix.patch_dir).map_err(|e| format!("patch dir: {e}"))?;
+            let file = fix.patch_dir.join(format!(
+                "{short}-{}.patch",
+                &uuid::Uuid::new_v4().simple().to_string()[..8]
+            ));
+            std::fs::write(&file, format!("{patch}\n")).map_err(|e| format!("write patch: {e}"))?;
+            let file_s = file.to_string_lossy().to_string();
+            // Re-verify on a clean worktree of the commit: files the patch does not carry
+            // (ignored or hidden ones, state left in the player's directory) cannot count.
+            let clean = temp_worktree(repo, &full, "referee-verify")?;
+            let verified = match crate::git::git(&clean.path, &["apply", &file_s], &none) {
+                Err(e) => Err(format!("the patch does not apply to the commit: {e}")),
+                Ok(_) => {
+                    let argv = Cmd::Line(cmd.to_string()).argv();
+                    let run = proc::run(&argv, &clean.path, None, &none, timeout)?;
+                    if run.ok() {
+                        Ok(())
+                    } else {
+                        Err(format!(
+                            "the patch alone does not pass the check on a clean checkout: {}",
+                            proc::tail(run.combined().trim(), 400)
+                        ))
+                    }
+                }
+            };
+            match verified {
+                Ok(()) => {
+                    out["verified"] = json!(true);
+                    out["patch"] = json!(file_s);
+                }
+                Err(why) => {
+                    let _ = std::fs::remove_file(&file);
+                    out["verified"] = json!(false);
+                    reject(&mut out, why);
+                }
+            }
+        }
     }
     Ok(out)
 }
@@ -340,6 +465,7 @@ mod tests {
             player: json!({"kind": "shell", "command": command}),
             wall: Duration::from_secs(60),
             patch_dir: patch_dir.to_path_buf(),
+            protect: vec![],
         }
     }
 
@@ -416,5 +542,127 @@ mod tests {
             inert("a {{file:/etc/passwd}} b {{search:x}}"),
             "a { {file:/etc/passwd}} b { {search:x}}"
         );
+    }
+
+    fn refs(d: &Path) -> String {
+        crate::git::git(d, &["for-each-ref"], &BTreeMap::new()).unwrap()
+            + &crate::git::git(d, &["rev-parse", "HEAD"], &BTreeMap::new()).unwrap()
+    }
+
+    #[test]
+    fn a_player_that_commits_or_branches_cannot_touch_the_real_repository() {
+        let d = repo();
+        let patches = tempfile::tempdir().unwrap();
+        let before = refs(d.path());
+        let opts = fix_opts(
+            "printf '9\\n' > v.txt; git -c user.name=p -c user.email=p@example.invalid commit -qam sneaky; \
+             git branch evil; git config core.hooksPath /tmp/evil; echo done",
+            2,
+            patches.path(),
+        );
+        let v = check_and_fix(
+            d.path(),
+            "HEAD",
+            "grep -qx 9 v.txt",
+            Duration::from_secs(20),
+            Some(&opts),
+        )
+        .unwrap();
+        // The committed change still comes back as a patch (diff against the commit, not HEAD).
+        assert_eq!(v["fix"]["point"], true, "{v}");
+        assert_eq!(v["fix"]["verified"], true);
+        assert_eq!(v["fix"]["files"], json!(["v.txt"]));
+        assert_eq!(refs(d.path()), before, "real refs untouched");
+        let hooks = Command::new("git")
+            .args(["config", "--get", "core.hooksPath"])
+            .current_dir(d.path())
+            .output()
+            .unwrap();
+        assert!(hooks.stdout.is_empty(), "real config untouched");
+    }
+
+    #[test]
+    fn a_pass_that_depends_on_files_outside_the_patch_is_rejected() {
+        let d = repo();
+        std::fs::write(d.path().join(".gitignore"), "secret.txt\n").unwrap();
+        let git = |args: &[&str]| {
+            assert!(Command::new("git")
+                .args(args)
+                .current_dir(d.path())
+                .env("GIT_AUTHOR_NAME", "t")
+                .env("GIT_AUTHOR_EMAIL", "t@example.invalid")
+                .env("GIT_COMMITTER_NAME", "t")
+                .env("GIT_COMMITTER_EMAIL", "t@example.invalid")
+                .status()
+                .unwrap()
+                .success())
+        };
+        git(&["add", "-A"]);
+        git(&["commit", "-qm", "ignore"]);
+        let patches = tempfile::tempdir().unwrap();
+        // The player satisfies the check with an ignored file and a decoy change.
+        let opts = fix_opts(
+            "echo ok > secret.txt; echo decoy >> v.txt; echo done",
+            1,
+            patches.path(),
+        );
+        let v = check_and_fix(
+            d.path(),
+            "HEAD",
+            "test -f secret.txt",
+            Duration::from_secs(20),
+            Some(&opts),
+        )
+        .unwrap();
+        assert_eq!(v["fix"]["point"], false, "{v}");
+        assert_eq!(v["fix"]["verified"], false);
+        assert_eq!(v["fix"]["escalate"], true);
+        assert!(v["fix"]["patch"].is_null());
+        assert_eq!(std::fs::read_dir(patches.path()).unwrap().count(), 0);
+        assert_eq!(worktrees(d.path()), 1);
+    }
+
+    #[test]
+    fn a_fix_that_edits_protected_paths_or_changes_nothing_is_rejected() {
+        let d = repo();
+        let patches = tempfile::tempdir().unwrap();
+        let mut opts = fix_opts("printf '9\\n' > v.txt; echo done", 1, patches.path());
+        opts.protect = vec!["v.txt".into()];
+        let v = check_and_fix(
+            d.path(),
+            "HEAD",
+            "grep -qx 9 v.txt",
+            Duration::from_secs(20),
+            Some(&opts),
+        )
+        .unwrap();
+        assert_eq!(v["fix"]["point"], false, "{v}");
+        assert!(v["fix"]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("protected paths: v.txt"));
+        // A check that flips to green without any change is not a fix.
+        let flag = patches.path().join("flag");
+        let flaky = format!("test -f {0} || {{ touch {0}; exit 1; }}", flag.display());
+        let opts = fix_opts("echo nothing", 1, patches.path());
+        let v = check_and_fix(
+            d.path(),
+            "HEAD",
+            &flaky,
+            Duration::from_secs(20),
+            Some(&opts),
+        )
+        .unwrap();
+        assert_eq!(v["fix"]["point"], false, "{v}");
+        assert!(v["fix"]["reason"]
+            .as_str()
+            .unwrap()
+            .contains("without any change"));
+    }
+
+    #[test]
+    fn a_revision_that_looks_like_an_option_is_refused() {
+        let d = repo();
+        assert!(check_commit(d.path(), "--output=/tmp/x", "true", Duration::from_secs(5)).is_err());
     }
 }

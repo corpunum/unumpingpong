@@ -47,6 +47,8 @@ COMMANDS:
                               commit's verdict stays point=false; `fix` reports the outcome
       --player JSON           The fix player (PlayerSpec JSON); default {\"kind\":\"openunum\"}
       --fix-wall SECS         Wall budget of the fix (default 1800)
+      --protect PATH          (repeatable) A fix that changes this file or directory is
+                              rejected: name the tests and the check script
       --patch-dir DIR         Where a scoring fix's patch is written
                               (default ~/.local/share/unumpingpong/fixes)
   pending                   Balls waiting for an external server (JSON)
@@ -109,6 +111,7 @@ struct Args {
     fix_wall: Option<u64>,
     player: Option<String>,
     patch_dir: Option<PathBuf>,
+    protect: Vec<String>,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -192,6 +195,7 @@ fn parse_args() -> Result<Args, String> {
                     "repo" => a.repo = Some(v),
                     "sha" => a.sha = Some(v),
                     "player" => a.player = Some(v),
+                    "protect" => a.protect.push(v),
                     _ => a.tables.push(v),
                 }
             }
@@ -260,6 +264,7 @@ fn cmd_referee(a: &Args) -> Result<(), String> {
                     .patch_dir
                     .clone()
                     .unwrap_or_else(|| PathBuf::from(home).join(".local/share/unumpingpong/fixes")),
+                protect: a.protect.clone(),
             })
         }
         _ => None,

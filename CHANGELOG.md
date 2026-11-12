@@ -8,7 +8,17 @@
   temp worktree to make the same check pass. A scoring fix is written as a patch to
   `~/.local/share/unumpingpong/fixes/` (or `--patch-dir`) for a human or the orchestrator; nothing is committed or
   shipped, and the commit's own verdict stays `point: false`. The verdict gains
-  `fix: {point, rallies, maxRallies, status, reason, player, escalate, patch, diffstat}`.
+  `fix: {point, rallies, maxRallies, status, reason, player, escalate, patch, diffstat, files,
+  verified}`.
+- `--fix` hardening (review 11-12): the player works in an isolated clone with its own `.git`, so
+  committing, branching or changing git config there cannot touch the real repository, and the
+  patch is taken against the commit (a player commit no longer yields an empty patch). A fix
+  counts only when its patch, applied to a clean checkout of the commit, passes the check
+  (`verified`): a pass that depends on ignored files or leftover state is rejected.
+  `--protect PATH` (repeatable) rejects a fix that changes the tests or the check script; a check
+  that turns green with no change is rejected as flaky. A `--sha` that starts with `-` is refused.
+  Limit: the player and the check run as the calling user, with no sandbox; this guards against a
+  confused player, not a hostile one.
 - **`upp referee`**: referee a commit without a model. `upp referee --repo DIR --sha SHA
   [--timeout SECS] [--json] -- <check cmd>` runs the command in a throwaway detached worktree of
   that commit (so uncommitted files cannot make it pass) and prints a versioned JSON verdict
