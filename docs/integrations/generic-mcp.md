@@ -68,6 +68,11 @@ printf '%s\n' \
   | upp --db /tmp/check.db mcp --queue-only
 ```
 
+The second output line lists ten tools: `table_create`, `cards_wait`, `card_answer`, `transcript`,
+`integrate`, `table_status`, `table_list`, `ball_answer`, `table_stop`, `table_wait`.
+
 **Status: protocol tested** (`crates/upp/tests/cli.rs` drives `upp mcp` through initialize,
 tools/list, a full external-server table, and a two-table cards_wait / card_answer / transcript
 orchestration loop).
+
+Verified on 2026-11-12 with upp 0.5.0: stdio handshake (`initialize`, `tools/list`: ten tools) and a Claude Code 2.1.322 session that connected and called `table_list`.

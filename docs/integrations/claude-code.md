@@ -2,6 +2,9 @@
 
 ## As a player
 
+Players go in a match file as `[[table]]` entries (`[table.player]` is the player of the last
+`[[table]]`), or as `player = {...}` under `[defaults]`/in JSON:
+
 ```toml
 [table.player]
 kind = "claude"
@@ -59,7 +62,7 @@ stop kills the `claude` process group at once.
 Verified live (Haiku, `tools = []`): the player called `mcp__unumsearch__search` and answered with
 the right `path:line`. See "Using UnumSearch from players" in the README.
 
-**Status: flags verified** against Claude Code 2.1.303 `--help` (`--input-format stream-json`,
+**Status: flags verified** against Claude Code 2.1.303 and re-checked on 2.1.322 `--help` (`--input-format stream-json`,
 `--output-format stream-json`, `--verbose`, `--resume`, `--effort`, `--tools`, `--system-prompt`,
 `--strict-mcp-config`, `--setting-sources`, `--disable-slash-commands`,
 `--exclude-dynamic-system-prompt-sections`). **Verified live** (2026-10-19, Haiku 5.5): two user
@@ -74,12 +77,12 @@ or (only in a disposable checkout) `--dangerously-skip-permissions`. With `apply
 ## As the orchestrator over MCP (cards_wait / card_answer)
 
 ```bash
-claude mcp add unumpingpong -- upp mcp                     # this project, only you
+claude mcp add unumpingpong -- upp mcp                     # this project, only you (local scope)
 claude mcp add --scope user unumpingpong -- upp mcp        # every project
 claude mcp get unumpingpong                                # shows "✔ Connected"
 ```
 
-**Status: registered** (Claude Code 2.1.303 reported `✔ Connected`). The tools show up as
+**Status: registered** (Claude Code 2.1.303 reported `✔ Connected`). Without touching any config, `claude -p --strict-mcp-config --mcp-config '{"mcpServers":{"unumpingpong":{"command":"upp","args":["mcp","--queue-only"]}}}'` reported the server `connected` and the model called `mcp__unumpingpong__table_list` (2.1.322). The tools show up as
 `mcp__unumpingpong__<tool>`.
 
 This is the workflow that worked by hand, made explicit. One long-lived Claude Code session is
@@ -157,3 +160,5 @@ mkdir -p ~/.claude/skills && cp -r skills/unumpingpong ~/.claude/skills/
 ```
 
 Allow the CLI with `Bash(upp:*)`.
+
+Verified on 2026-11-12 with upp 0.5.0 and claude 2.1.322: live rally (Haiku, `acceptEdits`, point on rally 1) and `upp mcp` connected from `claude -p` with a tool call.

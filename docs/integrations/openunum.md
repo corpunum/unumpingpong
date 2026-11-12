@@ -51,7 +51,10 @@ thinking = "high"       # its thinking level (optional; the table's `effort` is 
 Rally 1 calls `session_spawn` under the parent (`POST /api/tool/run`) with
 `observationRoots: [<table cwd>]` and a referee-owned wall-time budget, plus
 `implementationWorktree: <cwd>` only when the cwd is a git top level (OpenUnum refuses it
-elsewhere). Later rallies resume the same worker (`POST /api/sessions/<id>/resume`); its result
+elsewhere). The worker's own working directory is its OpenUnum session workspace, not the table
+`cwd` (which it only observes): name files by absolute path in the ball, or a worker that is told
+"create hello.txt in the current directory" writes it elsewhere and the referee fails (seen on
+2026-11-12; it even wrote a copy into OpenUnum's own checkout). Later rallies resume the same worker (`POST /api/sessions/<id>/resume`); its result
 summary is the answer. A stopped table cancels the worker.
 
 **Status: run live (2026-10-20).** Two parallel tables with `kind = "openunum"` against a live
@@ -77,3 +80,5 @@ forward to the daemon (`runtime.pingpong.daemonUrl`, set on the OpenUnum side) t
 its tables here. Those tables use the player from `uppd --compat-player '<player JSON>'` (or
 `$UPPD_COMPAT_PLAYER`), by default `claude`; for example `{"kind":"openunum"}`. Off loopback the
 daemon requires its bearer token (see `uppd --help`).
+
+Verified on 2026-11-12 with upp 0.5.0 (OpenUnum on 127.0.0.1:18880, session-tree mode): live rally, point on rally 1 once the ball used an absolute path; a ball with a relative path failed twice (see above). Not run: plain own-session mode, `uppd --compat-player`.

@@ -5,7 +5,7 @@
 ```toml
 [table.player]
 kind = "opencode"
-model = "opencode/nemotron-3-ultra-free"   # provider/model, optional: -m
+model = "opencode/glm-5.3-flash-free"       # provider/model, optional: -m (`opencode models` lists them; free ones come and go)
 args = ["--auto"]                          # auto-approve permissions (opencode's own flag)
 timeout_secs = 900
 ```
@@ -37,3 +37,5 @@ was read in the binary (`JSON.stringify({type, timestamp, sessionID, ...})` for 
 ```
 
 **Status: registered** (`opencode mcp list` showed `✓ unumpingpong connected`, opencode 1.18.33).
+
+Verified on 2026-11-12 with upp 0.5.0 and opencode 1.18.33: live rally (`opencode/glm-5.3-flash-free`, `--auto`, point on rally 1); the guide's former model `opencode/nemotron-3-ultra-free` no longer exists and fails with "Unexpected server error".

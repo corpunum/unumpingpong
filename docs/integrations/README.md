@@ -22,11 +22,11 @@ with a model; **docs** = from documentation only.
 | Any command | `shell` | tested (CI, scripted agents) | n/a | [main README](../../README.md#players) |
 | OpenAI-compatible endpoints (llama.cpp, Halogen, vLLM, Ollama, LM Studio, cloud) | `openai` | tested live (Halogen 0.18, Qwen 3.8) | n/a | [openai-compatible.md](openai-compatible.md) |
 | OpenUnum | `openunum` | run live (own sessions or session-tree workers) | MCP client: docs; `uppd` serves OpenUnum's `/api/pingpong` API | [openunum.md](openunum.md) |
-| Claude Code | `claude` | flags verified (2.1.303) | registered (`✔ Connected`) | [claude-code.md](claude-code.md) |
-| OpenAI Codex CLI | `codex` | flags verified (0.160.0) | docs (`codex mcp add --help`) | [codex.md](codex.md) |
-| Gemini CLI | `gemini` | flags verified (0.45.1) | registered (listed; needs a trusted folder) | [gemini-cli.md](gemini-cli.md) |
-| opencode | `opencode` | flags verified (1.18.33) | registered (`connected`) | [opencode.md](opencode.md) |
+| Claude Code | `claude` | tested live (2.1.322, Haiku) | tested live (`connected`, tool call from Haiku) | [claude-code.md](claude-code.md) |
+| OpenAI Codex CLI | `codex` | tested live (0.167.0) | docs (`codex mcp add --help`) | [codex.md](codex.md) |
+| Gemini CLI | `gemini` | flags verified (0.45.1); login ineligible, see guide | registered (listed; needs a trusted folder) | [gemini-cli.md](gemini-cli.md) |
+| opencode | `opencode` | tested live (1.18.33) | registered (`connected`) | [opencode.md](opencode.md) |
 | Any MCP client | n/a | n/a | protocol tested (integration test) | [generic-mcp.md](generic-mcp.md) |
 
-Checked on 2026-10-19. CLI flags drift; if one breaks, `args` on the player adds or overrides
+Checked on 2026-10-19; re-verified on 2026-11-12 (see the "Verified" line in each guide). CLI flags drift; if one breaks, `args` on the player adds or overrides
 flags without a new release, and the `shell` player wraps anything.

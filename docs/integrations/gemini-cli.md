@@ -6,7 +6,7 @@
 [table.player]
 kind = "gemini"
 # model = "..."                    # optional: -m
-args = ["--approval-mode", "auto_edit"]
+args = ["--approval-mode", "auto_edit", "--skip-trust"]   # without --skip-trust an untrusted cwd forces approval mode "default"
 timeout_secs = 900
 ```
 
@@ -26,6 +26,10 @@ to start fresh each rally (the return message then repeats the brief).
 `--resume <uuid>` handling were read in its bundled source (`JsonFormatter`,
 `SessionSelector.findSession`: "a full UUID or an index number"). Not run with a model.
 
+As of 2026-11-12 Gemini CLI 0.45.1 with a Google account login fails every call with
+`IneligibleTierError: This client is no longer supported for Gemini Code Assist for individuals`
+(exit 55, the table records a fault). Use an API key or another account tier.
+
 Note: the ball is passed as the `-p` argument, so a very large ball (over ~128 KB on Linux) fails;
 keep briefs small (that is the point) or use `{{file:...}}` sparingly.
 
@@ -43,3 +47,5 @@ gemini mcp list
 
 **Status: registered** (0.45.1 wrote the entry and `gemini mcp list` listed it; project servers
 stay disabled until the folder is trusted).
+
+Verified on 2026-11-12 with upp 0.5.0 and gemini 0.45.1: commands only, the logged-in account is ineligible (see above), so no model turn ran.

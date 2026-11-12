@@ -8,7 +8,7 @@ that speak `/chat/completions`.
 kind = "openai"
 base_url = "http://127.0.0.1:8080/v1"   # default
 model = "local-model"                   # what your server expects in "model"
-api_key_env = "OPENAI_API_KEY"          # name of the env var; omit for local servers
+api_key_env = "OPENAI_API_KEY"          # name of the env var, which must be set (else the table errors before rally 1); omit for local servers
 system = "You are a careful Rust programmer."
 temperature = 0.2
 max_tokens = 4096
@@ -41,3 +41,5 @@ forks the stored state of the previous turn instead of matching the prefix. Hand
 **Status: tested live** on Halogen 0.18.11 (Qwen 3.8 Flash Next) with `halogen_keep = true`: one
 table, `fizzbuzz` from [three-functions.toml](../../examples/three-functions.toml), point on
 rally 1 in 42 s, 992 tokens, `cargo test` referee.
+
+Verified on 2026-11-12 with upp 0.5.0: commands only against a local stub of `/v1/chat/completions` (every key above accepted, `apply` wrote the file, point on rally 1); no real model server was running, so no live model rally.

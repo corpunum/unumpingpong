@@ -68,8 +68,11 @@ Update this file with every change that alters state, open work or how to ship. 
 
 - Benchmark refresh: `bench/` has the 12 real bug fixes; rerun when a player or model changes and
   update `docs/BENCHMARKS.md`.
-- Integrations to verify end to end after the release: `docs/integrations/` (Claude Code, Codex,
-  Gemini CLI, opencode, OpenAI-compatible, OpenUnum).
+- Integrations: verified end to end on 2026-11-12 (`docs/integrations/`, "Verified" line in each
+  guide): live rallies for Claude Code, Codex, opencode and OpenUnum; `upp mcp` handshake and a
+  Claude Code tool call. Still open: Gemini CLI (the Google login is ineligible, no model turn),
+  OpenAI-compatible against a real server (only a stub ran), MCP registration with Codex, Gemini
+  and opencode (commands checked with `--help` only).
 
 ## Traps
 

@@ -75,7 +75,7 @@ tokens: fresh input + output + cache reads at 0.1.
 off (and leaves `unumsearch` on). Verified live (`gpt-5.6-luna`, app server): the player called
 `unumsearch/search` and answered with the right `path:line`.
 
-**Status: verified** against codex-cli 0.160.0 (`codex exec --help`, `codex exec resume --help`,
+**Status: verified** against codex-cli 0.160.0, re-checked on 0.167.0 (`codex exec --help`, `codex exec resume --help`,
 `codex app-server --help`, `codex features list`, the generated app-server JSON schema).
 **Verified live** (2026-10-19, `gpt-5.6-luna`): two turns on one app-server thread with per-turn
 `effort`; the cloud benchmark ran with the persistent adapter (`bench/results.md`).
@@ -104,3 +104,5 @@ args = ["mcp"]
 global config untouched).
 
 Codex also reads Agent Skills: copy `skills/unumpingpong/` into `~/.agents/skills/`.
+
+Verified on 2026-11-12 with upp 0.5.0 and codex-cli 0.167.0: live rally (app server, `--dangerously-bypass-approvals-and-sandbox`, point on rally 1); `codex mcp add` checked with `--help` only.
