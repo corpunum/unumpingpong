@@ -38,17 +38,19 @@ COMMANDS:
   cards [--run ID] [--table T]... [--since N] [--wait SECS]
                             Result cards (JSON); --wait blocks until one arrives
   referee --repo DIR --sha SHA [--timeout SECS] [--json] -- <check cmd>
-                            Run a check command against a commit in a temp detached
-                            worktree (no model); print the JSON verdict; exit 0 = point,
+                            Run a check command against a commit in a temp isolated
+                            clone (no model); print the JSON verdict; exit 0 = point,
                             1 = no point, 2 = could not run. For ship pipelines.
       --sandbox auto|bwrap|none
-                              Confine the check with bubblewrap: system read-only, writes
-                              only in the checkout, private /tmp, credentials in $HOME
-                              masked, no network. auto (default) = when bwrap works here;
-                              the verdict's `sandbox` says what ran
+                              Confine the check with bubblewrap (profile 2): system
+                              read-only, writes only in the checkout (its .git read-only),
+                              empty /run, /tmp and $HOME (toolchains bound read-only), env
+                              cleared, all namespaces unshared, no network. auto (default)
+                              = when bwrap works here; the verdict's `sandbox` says what ran
       --net                   Allow network inside the sandbox
+      --ro PATH               (repeatable) Extra read-only bind (absolute path) in the sandbox
       --fix N                 On a failed check, give a player at most N (≤5) rallies in a
-                              separate temp worktree; a scoring fix is saved as a patch
+                              separate temp clone; a scoring fix is saved as a patch
                               (~/.local/share/unumpingpong/fixes), never committed. The
                               commit's verdict stays point=false; `fix` reports the outcome
       --player JSON           The fix player (PlayerSpec JSON); default {\"kind\":\"openunum\"}
@@ -119,6 +121,7 @@ struct Args {
     patch_dir: Option<PathBuf>,
     protect: Vec<String>,
     sandbox: Option<String>,
+    ro: Vec<String>,
     net: bool,
 }
 
@@ -188,7 +191,7 @@ fn parse_args() -> Result<Args, String> {
             }
             Long(
                 k @ ("next" | "parent" | "into" | "check" | "table" | "repo" | "sha" | "player"
-                | "protect" | "sandbox"),
+                | "protect" | "sandbox" | "ro"),
             ) => {
                 let k = k.to_string();
                 let v = p
@@ -206,6 +209,7 @@ fn parse_args() -> Result<Args, String> {
                     "player" => a.player = Some(v),
                     "protect" => a.protect.push(v),
                     "sandbox" => a.sandbox = Some(v),
+                    "ro" => a.ro.push(v),
                     _ => a.tables.push(v),
                 }
             }
@@ -249,10 +253,19 @@ fn parse_args() -> Result<Args, String> {
     Ok(a)
 }
 
-/// `upp referee`: run a check command against a commit (temp detached worktree), print the
+/// `upp referee`: run a check command against a commit (isolated clone), print the
 /// JSON verdict, exit 0 on a point, 1 without one. Errors (no repo, unknown commit) exit 2.
 fn cmd_referee(a: &Args) -> Result<(), String> {
-    let cmd = a.pos.join(" ");
+    // One word after `--` is a shell line (as before); several are an argv: quote each.
+    let cmd = if a.pos.len() == 1 {
+        a.pos[0].clone()
+    } else {
+        a.pos
+            .iter()
+            .map(|w| format!("'{}'", w.replace('\'', "'\\''")))
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
     if cmd.trim().is_empty() {
         return Err(
             "referee: missing check command (upp referee --repo DIR --sha SHA -- <cmd>)".into(),
@@ -293,6 +306,17 @@ fn cmd_referee(a: &Args) -> Result<(), String> {
             }
         },
         net: a.net,
+        ro: a
+            .ro
+            .iter()
+            .map(|p| {
+                if p.starts_with('/') {
+                    Ok(PathBuf::from(p))
+                } else {
+                    Err(format!("--ro {p:?}: absolute paths only"))
+                }
+            })
+            .collect::<Result<_, _>>()?,
     };
     let v =
         upp_core::commit_check::check_and_fix(&repo, &sha, &cmd, timeout, fix.as_ref(), &guard)?;

@@ -211,35 +211,47 @@ checks will run, so it knows the evidence expected.
 ### Refereeing a commit (`upp referee`)
 
 `upp referee --repo DIR --sha SHA [--timeout SECS] [--json] -- <check cmd>` runs the same kind of
-command check against a commit, with no table and no player. The command runs in a fresh detached
-worktree of the commit (removed afterwards), so only committed files count. The JSON verdict:
+command check against a commit, with no table and no player. The command runs in a fresh isolated
+clone of the commit (removed afterwards), so only committed files count. The JSON verdict:
 
 ```json
 {"version":1,"mode":"check","point":true,"sha":"<40 hex>","cmd":"cargo test --locked","exit":0,
  "timedOut":false,"durationMs":51234,"output":"<head and tail of the log>","ranAt":"2026-11-12T06:30:07.761Z",
- "engine":"upp 0.5.0"}
+ "engine":"upp 0.5.0","sandbox":"bwrap","net":false,"sandboxProfile":2}
 ```
 
 Exit 0 = point, 1 = no point, 2 = could not run (not a repository, unknown commit). A ship pipeline
 calls it before a commit joins a bundle and stores the verdict with the queue entry.
 
 `--fix N [--player JSON] [--fix-wall SECS]` adds a bounded repair step after a failed check: a
-player gets at most N rallies in its own temp worktree, refereed by the same command. If it scores,
+player gets at most N rallies in its own temp clone, refereed by the same command. If it scores,
 `fix.patch` names the patch file (apply it with `git apply`); otherwise `fix.escalate` is true and
 the entry goes to a human or the orchestrator. The commit's `point` and the exit code (1) do not
 change: a fix is a proposal, not a pass.
 
 What a fix must survive: the player works in an isolated clone (own `.git`), the patch is the diff
 against the commit, and `fix.point` is true only when that patch passes the check on a clean
-checkout (`fix.verified`) and touches no `--protect PATH` (name the tests and the check script).
+checkout (`fix.verified`) and touches no `--protect PATH` (name the tests and the check script; `./tests/` = `tests`, absolute paths and `..` are refused; a file moved out of a protected directory counts as touched).
 `fix.files` lists what it changes. Review the patch before applying it.
 
 Checks are confined with bubblewrap by default (`--sandbox auto`; `bwrap` = required, `none` =
-off): read-only system, writes only in the checkout, private `/tmp`, masked credentials
-(`~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.config/gh`, `~/.netrc`, ... ), no network unless `--net`.
-The verdict's `sandbox` field says what actually ran (`none` on hosts where unprivileged user
-namespaces are refused). A check that needs to download or to write outside its checkout fails
-there: pass `--net`, or make the check hermetic. The fix player itself is not confined by `upp`.
+off). Profile 2 is an allowlist: all namespaces unshared, system read-only, empty `/run`, `/tmp`,
+`/var/tmp` and `$HOME`, a cleared environment (only PATH, HOME, USER, LOGNAME, LANG, LC_ALL, TERM,
+TZ, CARGO_HOME, RUSTUP_HOME, RUSTUP_TOOLCHAIN are passed), write access only to the checkout, whose
+`.git` is read-only. Toolchains under `$HOME` (`~/.cargo`, `~/.rustup`, `~/.nvm`, `~/.local/bin`,
+`~/go`, `~/.bun`, `~/.deno`, `~/.pyenv`, `~/.npm`, ...) are bound back read-only; credential-like
+files in them (two levels deep) are masked. `--ro PATH` (repeatable, absolute) adds more read-only
+binds. No network unless `--net`. The verdict carries `sandbox` (`none` on hosts where
+unprivileged user namespaces are refused), `net` and `sandboxProfile` (2).
+
+Checkouts are isolated clones under `$XDG_CACHE_HOME/unumpingpong/referee` (or
+`~/.cache/unumpingpong/referee`, mode 0700), never worktrees of your repository. Several words after
+`--` are an argv (each is quoted); one word is a shell line.
+
+Not covered: the fix player itself is not sandboxed (it runs as you); file systems outside `$HOME`
+(for example `/etc`, `/var`, other mounts) stay readable inside the sandbox; with `--net` anything
+readable can be sent out. A check that needs to download or to write outside its checkout fails
+there: pass `--net`, or make the check hermetic.
 
 ## Server modes
 

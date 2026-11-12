@@ -20,7 +20,10 @@ const GIT_TIMEOUT: Duration = Duration::from_secs(120);
 
 /// Run git in `dir`; Ok(stdout trimmed) on exit 0.
 pub fn git(dir: &Path, args: &[&str], env: &BTreeMap<String, String>) -> Result<String, String> {
-    let mut argv = vec!["git".to_string()];
+    // Never run a fsmonitor command configured in a directory a player may have written to.
+    let mut argv: Vec<String> = ["git", "-c", "core.fsmonitor=false"]
+        .map(String::from)
+        .into();
     argv.extend(args.iter().map(|s| s.to_string()));
     let out = proc::run(&argv, dir, None, env, GIT_TIMEOUT)?;
     if out.ok() {

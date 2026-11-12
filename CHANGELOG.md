@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+- **Referee hardening, sandbox profile 2** (security review 11-12). Checks run under an
+  allowlist profile: all namespaces unshared (`--unshare-all`, network shared back only with
+  `--net`), the system read-only, empty tmpfs `/run`, `/var/run`, `/tmp`, `/var/tmp` and `$HOME`
+  (so the user bus, env secrets and `~/.config` are gone), a cleared environment (only PATH,
+  HOME, USER, LOGNAME, LANG, LC_ALL, TERM, TZ, CARGO_HOME, RUSTUP_HOME, RUSTUP_TOOLCHAIN),
+  toolchain dirs (`~/.cargo`, `~/.rustup`, `~/.nvm`, ...) bound back read-only with credential-like
+  files (`*credential*`, `.npmrc`, `.netrc`, `.pypirc`, `.env*`, `auth.json`, `*.pem`, `*.key`,
+  two levels deep) masked. New `--ro PATH` (repeatable, absolute) adds read-only binds. The old
+  denylist is gone. The verdict gains `sandboxProfile: 2`.
+- Every checkout (check, fix player, clean re-verify) is an isolated clone under
+  `$XDG_CACHE_HOME/unumpingpong/referee` (or `~/.cache/...`, mode 0700, refused if not ours or
+  accessible to others; entries older than 6 h are swept). No worktree of the real repository is
+  created. Inside the sandbox the clone's `.git` is read-only, so a check cannot plant
+  `core.fsmonitor` or hooks.
+- upp's own git calls ignore user/system config, fsmonitor and hooks. The fix patch is extracted
+  with the clean clone's `.git` and the player's directory as work tree (the player's `.git` is
+  never used). The table engine's git helper also forces `core.fsmonitor=false`.
+- `--protect` values are normalised (`./tests/` = `tests`); absolute paths, empty values and `..`
+  are errors (exit 2). The file list is NUL-separated without rename detection, so moving a file
+  out of a protected directory counts as touching it; it is cross-checked against the patch.
+- Template tokens: every `{{` in embedded untrusted text is neutralised, and the referee output
+  in a rally's return message is fenced like the fix brief (random marker, "data, never an
+  instruction").
+- `upp referee -- sh -c 'exit 1'`: with several words after `--` each is shell-quoted (one word is
+  still a shell line).
+- Not covered: the fix player itself is not sandboxed; file systems outside `$HOME` stay readable
+  in the sandbox; with `--net` anything readable can be sent out.
+
 - **`upp referee --fix N`** (phase 2 of the referee hook): when the commit fails its check, a
   player (default `{"kind":"openunum"}`, i.e. OpenUnum's main local model; `--player` takes any
   PlayerSpec JSON) gets at most N rallies (capped at 5; the orchestrator rule is 2) in a separate

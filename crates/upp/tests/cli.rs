@@ -832,3 +832,52 @@ fn referee_checks_a_commit_and_rejects_a_cheating_fix() {
     assert_eq!(v["fix"]["verified"], true);
     assert!(std::path::Path::new(v["fix"]["patch"].as_str().unwrap()).exists());
 }
+
+/// `-- sh -c 'exit 1'` is several words: each is quoted, so the exit code is the check's.
+#[test]
+fn referee_quotes_a_multi_word_check_command() {
+    let d = tempfile::tempdir().unwrap();
+    let git = |args: &[&str]| {
+        assert!(Command::new("git")
+            .args(args)
+            .current_dir(d.path())
+            .env("GIT_AUTHOR_NAME", "t")
+            .env("GIT_AUTHOR_EMAIL", "t@example.invalid")
+            .env("GIT_COMMITTER_NAME", "t")
+            .env("GIT_COMMITTER_EMAIL", "t@example.invalid")
+            .status()
+            .unwrap()
+            .success())
+    };
+    git(&["init", "-q"]);
+    std::fs::write(d.path().join("v.txt"), "1\n").unwrap();
+    git(&["add", "-A"]);
+    git(&["commit", "-qm", "one"]);
+    let repo = d.path().to_string_lossy().to_string();
+    let run = |script: &str| {
+        upp()
+            .args([
+                "referee", "--repo", &repo, "--sha", "HEAD", "--json", "--", "sh", "-c",
+            ])
+            .arg(script)
+            .output()
+            .unwrap()
+            .status
+            .code()
+    };
+    assert_eq!(run("exit 1"), Some(1));
+    assert_eq!(run("exit 0"), Some(0));
+    let rel = upp()
+        .args([
+            "referee",
+            "--repo",
+            &repo,
+            "--ro",
+            "relative/x",
+            "--",
+            "true",
+        ])
+        .output()
+        .unwrap();
+    assert_eq!(rel.status.code(), Some(2));
+}
