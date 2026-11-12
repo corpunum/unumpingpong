@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **`upp referee`**: referee a commit without a model. `upp referee --repo DIR --sha SHA
+  [--timeout SECS] [--json] -- <check cmd>` runs the command in a throwaway detached worktree of
+  that commit (so uncommitted files cannot make it pass) and prints a versioned JSON verdict
+  (`version`, `mode: "check"`, `point`, `sha`, `cmd`, `exit`, `timedOut`, `durationMs`, `output` =
+  head and tail of the log, `ranAt`, `engine`). Exit 0 = point, 1 = no point, 2 = could not run.
+  Made for ship pipelines: a queue entry carries the verdict of its own commit.
+
 ## v0.5.0 (2026-11-11) - Auto-merge, OpenUnum-compatible API, session-tree player
 
 - **Auto-merge** (`auto_merge` on a table): after the referee passes, the verified point is

@@ -208,6 +208,21 @@ On failure, the return message lists the failed checks with the tail of their ou
 check), the server note, and "fix it and answer again". The first ball tells the player which
 checks will run, so it knows the evidence expected.
 
+### Refereeing a commit (`upp referee`)
+
+`upp referee --repo DIR --sha SHA [--timeout SECS] [--json] -- <check cmd>` runs the same kind of
+command check against a commit, with no table and no player. The command runs in a fresh detached
+worktree of the commit (removed afterwards), so only committed files count. The JSON verdict:
+
+```json
+{"version":1,"mode":"check","point":true,"sha":"<40 hex>","cmd":"cargo test --locked","exit":0,
+ "timedOut":false,"durationMs":51234,"output":"<head and tail of the log>","ranAt":"2026-11-12T06:30:07.761Z",
+ "engine":"upp 0.5.0"}
+```
+
+Exit 0 = point, 1 = no point, 2 = could not run (not a repository, unknown commit). A ship pipeline
+calls it before a commit joins a bundle and stores the verdict with the queue entry.
+
 ## Server modes
 
 - `auto` (default): referee pass = point; fail = return with the referee output.

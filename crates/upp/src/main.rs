@@ -37,6 +37,10 @@ COMMANDS:
                             Full balls, answers and referee output (on demand)
   cards [--run ID] [--table T]... [--since N] [--wait SECS]
                             Result cards (JSON); --wait blocks until one arrives
+  referee --repo DIR --sha SHA [--timeout SECS] [--json] -- <check cmd>
+                            Run a check command against a commit in a temp detached
+                            worktree (no model); print the JSON verdict; exit 0 = point,
+                            1 = no point, 2 = could not run. For ship pipelines.
   pending                   Balls waiting for an external server (JSON)
   answer <table> <accept|return|stop> [note...] [--next BALL]
                             Answer a ball as the external server; --next chains a table
@@ -90,6 +94,9 @@ struct Args {
     queue_only: bool,
     run: Option<String>,
     out: Option<PathBuf>,
+    repo: Option<String>,
+    sha: Option<String>,
+    timeout: Option<u64>,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -131,7 +138,15 @@ fn parse_args() -> Result<Args, String> {
                         .map_err(|e| format!("--wait: {e}"))?,
                 )
             }
-            Long(k @ ("next" | "parent" | "into" | "check" | "table")) => {
+            Long("timeout") => {
+                a.timeout = Some(
+                    p.value()
+                        .map_err(|e| e.to_string())?
+                        .parse()
+                        .map_err(|e| format!("--timeout: {e}"))?,
+                )
+            }
+            Long(k @ ("next" | "parent" | "into" | "check" | "table" | "repo" | "sha")) => {
                 let k = k.to_string();
                 let v = p
                     .value()
@@ -143,6 +158,8 @@ fn parse_args() -> Result<Args, String> {
                     "parent" => a.parent = Some(v),
                     "into" => a.into = Some(v),
                     "check" => a.check = Some(v),
+                    "repo" => a.repo = Some(v),
+                    "sha" => a.sha = Some(v),
                     _ => a.tables.push(v),
                 }
             }
@@ -183,6 +200,27 @@ fn parse_args() -> Result<Args, String> {
         }
     }
     Ok(a)
+}
+
+/// `upp referee`: run a check command against a commit (temp detached worktree), print the
+/// JSON verdict, exit 0 on a point, 1 without one. Errors (no repo, unknown commit) exit 2.
+fn cmd_referee(a: &Args) -> Result<(), String> {
+    let cmd = a.pos.join(" ");
+    if cmd.trim().is_empty() {
+        return Err(
+            "referee: missing check command (upp referee --repo DIR --sha SHA -- <cmd>)".into(),
+        );
+    }
+    let repo = PathBuf::from(a.repo.clone().unwrap_or_else(|| ".".into()));
+    let sha = a.sha.clone().unwrap_or_else(|| "HEAD".into());
+    let timeout = std::time::Duration::from_secs(a.timeout.unwrap_or(1200));
+    let v = upp_core::commit_check::check_commit(&repo, &sha, &cmd, timeout)?;
+    if a.json {
+        println!("{v}");
+    } else {
+        print_json(&v);
+    }
+    std::process::exit(if v["point"] == true { 0 } else { 1 });
 }
 
 fn print_json(v: &Value) {
@@ -281,6 +319,7 @@ fn real_main() -> Result<(), String> {
             }
             Ok(())
         }
+        "referee" => cmd_referee(&a),
         "validate" => {
             let m = MatchFile::load(Path::new(&need(0, "match file")?))?;
             let t = m.resolve()?;

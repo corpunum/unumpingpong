@@ -60,7 +60,7 @@ fn is_active(s: &str) -> bool {
     matches!(s, "queued" | "serving" | "refereeing" | "waiting_server")
 }
 
-fn iso(ms: i64) -> String {
+pub(crate) fn iso(ms: i64) -> String {
     let days = ms.div_euclid(86_400_000);
     let rem = ms.rem_euclid(86_400_000);
     // Howard Hinnant's civil_from_days.
