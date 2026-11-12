@@ -196,6 +196,8 @@ fn sandbox_prefix(
         a.push(s("--unshare-net"));
     }
     a.push(s("--die-with-parent"));
+    // No controlling terminal: a check cannot push input into the caller's tty.
+    a.push(s("--new-session"));
     a.extend([s("--tmpfs"), s("/run")]);
     if std::fs::symlink_metadata("/var/run")
         .map(|m| m.file_type().is_dir())
