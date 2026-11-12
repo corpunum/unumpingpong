@@ -135,8 +135,15 @@ impl OpenUnumPlayer {
             }
             None => {
                 let thinking = self.thinking.clone().or_else(|| ctx.effort.clone());
+                // The worker starts in its own OpenUnum workspace, not in the table's cwd:
+                // without this line a ball that says "this directory" lands elsewhere.
+                let task = format!(
+                    "Working directory for this task: {} (absolute; do all reads, writes and \
+                     commands there, not in your default workspace).\n\n{ball}",
+                    ctx.cwd.display()
+                );
                 let mut args = json!({
-                    "task": ball,
+                    "task": task,
                     "title": format!("upp: {}", ctx.table_id),
                     "handoff": "UnumPingPong table: an external referee decides when this is done. \
                                 Reply with what you changed and how you checked it.",
@@ -650,7 +657,8 @@ mod tests {
                 && spawn.contains("chat:parent")
                 && spawn.contains("\"refereeOwned\":true")
                 && spawn.contains("\"luna\"")
-                && spawn.contains("\"observationRoots\""),
+                && spawn.contains("\"observationRoots\"")
+                && spawn.contains("Working directory for this task: "),
             "{spawn}"
         );
         assert_eq!(
