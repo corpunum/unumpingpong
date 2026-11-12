@@ -29,6 +29,20 @@
   still a shell line).
 - Not covered: the fix player itself is not sandboxed; file systems outside `$HOME` stay readable
   in the sandbox; with `--net` anything readable can be sent out.
+- Third security review fixes. The check command, `--protect` values and the clone path are made
+  inert (`{{` neutralised) before they enter the fix brief, which shows the command only in a
+  fenced untrusted block and no longer tells the player to run the check (the referee does). New
+  table field `private_checks` keeps the referee command out of the first ball. Checkouts are now
+  a new repository holding only the commit and its parent (`git fetch --depth 2`), so a check
+  cannot read other branches or unreferenced objects; the real object directory is no longer
+  bound. Checks get `UPP_SHA`, `UPP_BASE_SHA`, `UPP_CHANGED_PATHS`. Trees a check made
+  unreadable (`chmod 000`) are removed. Sandbox tmpfs mounts have size limits. Credential
+  masking adds names containing `token` and `.cargo/config.toml`.
+- Not covered (documented in the reference): with an unsandboxed fix player `verified` is not
+  independent of the player (toolchain dirs); `--net` shares abstract unix sockets; file-system
+  sockets outside `/run`, `/tmp`, `$HOME` stay connectable; the kernel session keyring is
+  inherited; `--protect` is a denylist (Makefile, conftest.py, build.rs, package.json scripts are
+  for the reviewer); a check command must not end in a pipe.
 
 - **`upp referee --fix N`** (phase 2 of the referee hook): when the commit fails its check, a
   player (default `{"kind":"openunum"}`, i.e. OpenUnum's main local model; `--player` takes any

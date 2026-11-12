@@ -28,6 +28,20 @@ Update this file with every change that alters state, open work or how to ship. 
   default to OpenUnum's main local model (backup of the old env: `~/.config/uppd/env.bak-20261112`).
 - Use `~/.cargo/bin/cargo` (1.99): `/usr/bin/cargo` 1.75 cannot read the v4 `Cargo.lock`.
 
+## `upp referee` phase 2
+
+- `upp referee --fix N --player JSON --patch-dir DIR --protect PATH`: after a failed check a
+  player gets at most N rallies in its own isolated clone; a scoring fix is re-verified as a patch
+  on a clean clone and written to `--patch-dir`. Verdict fields: `sandbox`, `net`, `sandboxProfile`,
+  `fix{point,rallies,status,reason,escalate,patch,files,diffstat,verified}`.
+- Sandbox profile 2 (`--sandbox auto|bwrap|none`, `--net`, `--ro PATH`): see
+  `docs/REFERENCE.md` "Refereeing a commit". Checkouts hold the commit and its parent only
+  (`--depth 2`); checks get `UPP_SHA`, `UPP_BASE_SHA`, `UPP_CHANGED_PATHS`.
+- Security reviews: the first failed. The second passed check-only mode but failed the fix flow
+  (template injection through the check command; the brief asked the player to run the check).
+  Fixed in this bundle; the third review is pending.
+- Automatic fix runs in the ship queue stay disabled until the third review passes.
+
 ## How to ship
 
 1. Detached worktree of `origin/main`, change, then the gates:

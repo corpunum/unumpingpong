@@ -248,10 +248,37 @@ Checkouts are isolated clones under `$XDG_CACHE_HOME/unumpingpong/referee` (or
 `~/.cache/unumpingpong/referee`, mode 0700), never worktrees of your repository. Several words after
 `--` are an argv (each is quoted); one word is a shell line.
 
-Not covered: the fix player itself is not sandboxed (it runs as you); file systems outside `$HOME`
-(for example `/etc`, `/var`, other mounts) stay readable inside the sandbox; with `--net` anything
-readable can be sent out. A check that needs to download or to write outside its checkout fails
-there: pass `--net`, or make the check hermetic.
+The clone is a new repository fetched with `--depth 2`: it holds the commit and its parents only,
+no other branch, tag or unreferenced object of your repository. `git diff HEAD^ HEAD` works,
+`git diff HEAD~5` or `git log` further back do not (a root commit has no `HEAD^`). The check also
+gets `UPP_SHA` (full sha), `UPP_BASE_SHA` (first parent's full sha, empty for a root commit) and
+`UPP_CHANGED_PATHS` (newline-separated paths of `git diff --name-only --no-renames BASE SHA`,
+computed by upp in your repository; for a root commit, all its files), sandboxed or not, in the
+fix table's referee run and in the verify run too. Each sandbox tmpfs has a size limit (64 MiB for
+`/run`, 2 GiB for `/tmp` and `/var/tmp`, 256 MiB for `$HOME`) on bubblewrap 0.9+.
+
+The fix brief shows the check command only as a fenced, untrusted block, and tells the player not
+to run it: the referee runs the check after the answer and returns the output.
+
+Not covered:
+
+- The fix player itself is not sandboxed (it runs as you), so `verified` is not independent of
+  the player: it can change the toolchain directories the verify run reads (`~/.local/bin`,
+  `~/.cargo`, ...). Run the player in a sandbox for an independent result.
+- File systems outside `$HOME` (for example `/etc`, `/var`, other mounts) stay readable inside the
+  sandbox; with `--net` anything readable can be sent out.
+- `--net` shares the host network namespace, including abstract unix sockets (for example X11), so
+  it is more than exfiltration.
+- File-system sockets outside `/run`, `/tmp` and `$HOME` (for example under `/var/snap`) stay
+  connectable.
+- The kernel session keyring is inherited.
+- `--protect` is a denylist: edits to other files that affect the check (`Makefile`, `conftest.py`,
+  `build.rs`, `package.json` scripts) are for the human reviewer.
+- A check command must not end in a pipe (`cmd | tail`): the pipe's last command decides the exit
+  code. Use `set -o pipefail` or no pipe.
+
+A check that needs to download or to write outside its checkout fails there: pass `--net`, or make
+the check hermetic.
 
 ## Server modes
 

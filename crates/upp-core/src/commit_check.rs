@@ -117,11 +117,36 @@ fn bwrap_works() -> bool {
     bwrap_flags().is_some()
 }
 
+/// Whether this bubblewrap takes `--size BYTES` before `--tmpfs` (0.9+); older ones get
+/// unlimited tmpfs mounts.
+fn bwrap_sizes() -> bool {
+    static PROBE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *PROBE.get_or_init(|| {
+        let Some((flags, _)) = bwrap_flags() else {
+            return false;
+        };
+        std::process::Command::new("bwrap")
+            .args(["--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc"])
+            .args(flags)
+            .args(["--size", "1048576", "--tmpfs", "/tmp", "true"])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    })
+}
+
+const MIB: u64 = 1024 * 1024;
+
 /// Regular files (depth 2 below `dir`) that look like credentials.
 fn secret_files(dir: &Path) -> Vec<PathBuf> {
-    fn secret_name(n: &str) -> bool {
+    fn secret_name(n: &str, parent: &str) -> bool {
         let n = n.to_lowercase();
         n.contains("credential")
+            || n.contains("token")
+            || (n == "config.toml" && parent == ".cargo")
             || matches!(
                 n.as_str(),
                 ".npmrc" | ".netrc" | ".pypirc" | ".env" | "auth.json"
@@ -134,16 +159,21 @@ fn secret_files(dir: &Path) -> Vec<PathBuf> {
     let Ok(rd) = std::fs::read_dir(dir) else {
         return out;
     };
+    let top = dir
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default();
     for e in rd.flatten() {
         let p = e.path();
         let Ok(ft) = e.file_type() else { continue };
-        if ft.is_file() && secret_name(&e.file_name().to_string_lossy()) {
+        if ft.is_file() && secret_name(&e.file_name().to_string_lossy(), &top) {
             out.push(p);
         } else if ft.is_dir() {
+            let sub = e.file_name().to_string_lossy().to_string();
             if let Ok(rd2) = std::fs::read_dir(&p) {
                 for e2 in rd2.flatten() {
                     if e2.file_type().map(|t| t.is_file()).unwrap_or(false)
-                        && secret_name(&e2.file_name().to_string_lossy())
+                        && secret_name(&e2.file_name().to_string_lossy(), &sub)
                     {
                         out.push(e2.path());
                     }
@@ -157,12 +187,12 @@ fn secret_files(dir: &Path) -> Vec<PathBuf> {
 /// The bubblewrap argv prefix (profile 2, an allowlist) for a check that may write only to
 /// `write`: the system read-only, empty `/run`, `/tmp` and `$HOME` (toolchains bound back
 /// read-only), a cleared environment, all namespaces unshared (network only with `net`), and
-/// the checkout's `.git` read-only. `objects` is the real repository's object directory
-/// (a `--shared` clone borrows from it). `None` = run unconfined.
+/// the checkout's `.git` read-only. `env` (UPP_SHA, ...) is set after the environment is
+/// cleared. `None` = run unconfined.
 fn sandbox_prefix(
     guard: &Guard,
     write: &Path,
-    objects: Option<&Path>,
+    env: &BTreeMap<String, String>,
 ) -> Result<Option<Vec<String>>, String> {
     match guard.sandbox {
         SandboxMode::Off => return Ok(None),
@@ -198,14 +228,23 @@ fn sandbox_prefix(
     a.push(s("--die-with-parent"));
     // No controlling terminal: a check cannot push input into the caller's tty.
     a.push(s("--new-session"));
-    a.extend([s("--tmpfs"), s("/run")]);
+    let sizes = bwrap_sizes();
+    // A size-limited tmpfs (bwrap 0.9+: `--size BYTES` right before `--tmpfs`).
+    let tmpfs = |a: &mut Vec<String>, path: &str, mib: u64| {
+        if sizes {
+            a.extend([s("--size"), (mib * MIB).to_string()]);
+        }
+        a.extend([s("--tmpfs"), s(path)]);
+    };
+    tmpfs(&mut a, "/run", 64);
     if std::fs::symlink_metadata("/var/run")
         .map(|m| m.file_type().is_dir())
         .unwrap_or(false)
     {
-        a.extend([s("--tmpfs"), s("/var/run")]);
+        tmpfs(&mut a, "/var/run", 64);
     }
-    a.extend([s("--tmpfs"), s("/tmp"), s("--tmpfs"), s("/var/tmp")]);
+    tmpfs(&mut a, "/tmp", 2048);
+    tmpfs(&mut a, "/var/tmp", 2048);
     let resolve = Path::new("/run/systemd/resolve");
     if guard.net && resolve.is_dir() {
         a.extend([s("--ro-bind"), ps(resolve), ps(resolve)]);
@@ -216,10 +255,13 @@ fn sandbox_prefix(
             a.extend([s("--setenv"), s(k), v.to_string_lossy().to_string()]);
         }
     }
+    for (k, v) in env {
+        a.extend([s("--setenv"), k.clone(), v.clone()]);
+    }
     let mut bound: Vec<PathBuf> = vec![];
     if let Some(home) = std::env::var_os("HOME").map(PathBuf::from) {
         if home.is_absolute() && home != Path::new("/") && home.is_dir() {
-            a.extend([s("--tmpfs"), ps(&home)]);
+            tmpfs(&mut a, &ps(&home), 256);
             for d in HOME_RO {
                 let p = home.join(d);
                 if p.exists() {
@@ -234,9 +276,6 @@ fn sandbox_prefix(
             a.extend([s("--ro-bind"), ps(p), ps(p)]);
             bound.push(p.clone());
         }
-    }
-    if let Some(o) = objects {
-        a.extend([s("--ro-bind"), ps(o), ps(o)]);
     }
     // Credentials inside the bound dirs look empty.
     let mut masks: BTreeSet<PathBuf> = BTreeSet::new();
@@ -269,10 +308,10 @@ fn guarded_argv(
     cmd: &str,
     guard: &Guard,
     write: &Path,
-    objects: Option<&Path>,
+    env: &BTreeMap<String, String>,
 ) -> Result<(Vec<String>, &'static str), String> {
     let inner = Cmd::Line(cmd.to_string()).argv();
-    Ok(match sandbox_prefix(guard, write, objects)? {
+    Ok(match sandbox_prefix(guard, write, env)? {
         Some(mut pre) => {
             pre.extend(inner);
             (pre, "bwrap")
@@ -327,8 +366,31 @@ struct TempClone {
 
 impl Drop for TempClone {
     fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.path);
+        remove_tree(&self.path);
     }
+}
+
+/// Make every directory below `p` (without following symlinks) owner-accessible, so that a
+/// check's `chmod 000` cannot keep its tree from being removed.
+fn make_removable(p: &Path) {
+    let Ok(m) = std::fs::symlink_metadata(p) else {
+        return;
+    };
+    if !m.file_type().is_dir() {
+        return;
+    }
+    let _ = std::fs::set_permissions(p, std::fs::Permissions::from_mode(m.mode() | 0o700));
+    if let Ok(rd) = std::fs::read_dir(p) {
+        for e in rd.flatten() {
+            make_removable(&e.path());
+        }
+    }
+}
+
+/// Remove a file, symlink or directory tree, best effort.
+fn remove_tree(p: &Path) {
+    make_removable(p);
+    let _ = std::fs::remove_dir_all(p).or_else(|_| std::fs::remove_file(p));
 }
 
 fn now_iso() -> String {
@@ -401,17 +463,31 @@ fn sweep_older_than(parent: &Path, age: Duration) {
             .map(|d| d > age)
             .unwrap_or(false);
         if old {
-            let p = e.path();
-            let _ = std::fs::remove_dir_all(&p).or_else(|_| std::fs::remove_file(&p));
+            remove_tree(&e.path());
         }
     }
 }
 
-/// An isolated clone of `repo` checked out at `full`. It has its own `.git` (refs, config,
-/// hooks, index): nothing done there can touch the real repository. Objects are borrowed
-/// (`--shared`), so it is cheap; the sandbox binds the real object directory read-only.
+/// Percent-encode a path for a `file://` URL.
+fn file_url(path: &str) -> String {
+    let mut u = String::from("file://");
+    for b in path.bytes() {
+        if b.is_ascii_alphanumeric() || b"/-_.~".contains(&b) {
+            u.push(b as char);
+        } else {
+            u.push_str(&format!("%{b:02X}"));
+        }
+    }
+    u
+}
+
+/// An isolated checkout of `full` from `repo`: a new repository (own refs, config, hooks,
+/// index) that holds only that commit and its parents (`--depth 2`), fetched through
+/// upp's trusted git settings. No other branch, tag or unreferenced object of the real
+/// repository is reachable from it.
 fn temp_clone(repo: &Path, full: &str, kind: &str) -> Result<TempClone, String> {
-    let dir = temp_parent()?.join(format!(
+    let parent = temp_parent()?;
+    let dir = parent.join(format!(
         "{kind}-{}-{}",
         &full[..12.min(full.len())],
         &uuid::Uuid::new_v4().simple().to_string()[..8]
@@ -419,29 +495,57 @@ fn temp_clone(repo: &Path, full: &str, kind: &str) -> Result<TempClone, String> 
     let top = git(repo, &["rev-parse", "--show-toplevel"])?;
     let path_s = dir.to_string_lossy().to_string();
     let wt = TempClone { path: dir };
+    git(&parent, &["init", "--quiet", &path_s])?;
     git(
-        repo,
+        &wt.path,
         &[
-            "clone",
+            "-c",
+            "uploadpack.allowAnySHA1InWant=true",
+            "fetch",
             "--quiet",
-            "--shared",
-            "--no-checkout",
-            &top,
-            &path_s,
+            "--depth",
+            "2",
+            &file_url(&top),
+            full,
         ],
     )?;
-    git(&wt.path, &["checkout", "--quiet", "--detach", full])?;
+    git(&wt.path, &["checkout", "--quiet", "--detach", "FETCH_HEAD"])?;
     Ok(wt)
 }
 
-/// The real repository's object directory, canonical (a shared clone reads from it).
-fn objects_dir(repo: &Path) -> Result<PathBuf, String> {
-    let common = git(
+/// `UPP_SHA`, `UPP_BASE_SHA` (first parent, empty for a root commit) and `UPP_CHANGED_PATHS`
+/// (newline-separated), computed by upp's trusted git in the source repository.
+fn check_env(repo: &Path, full: &str) -> Result<BTreeMap<String, String>, String> {
+    let base = git(
         repo,
-        &["rev-parse", "--path-format=absolute", "--git-common-dir"],
-    )?;
-    std::fs::canonicalize(Path::new(&common).join("objects"))
-        .map_err(|e| format!("object directory: {e}"))
+        &["rev-parse", "--verify", "--quiet", &format!("{full}^")],
+    )
+    .unwrap_or_default();
+    let raw = if base.is_empty() {
+        git_raw(repo, &["ls-tree", "-r", "-z", "--name-only", full])?
+    } else {
+        git_raw(
+            repo,
+            &[
+                "diff",
+                "-z",
+                "--name-only",
+                "--no-renames",
+                "--no-ext-diff",
+                &base,
+                full,
+            ],
+        )?
+    };
+    let paths: Vec<&str> = raw.split('\0').filter(|p| !p.is_empty()).collect();
+    Ok([
+        ("UPP_SHA", full.to_string()),
+        ("UPP_BASE_SHA", base),
+        ("UPP_CHANGED_PATHS", paths.join("\n")),
+    ]
+    .into_iter()
+    .map(|(k, v)| (k.to_string(), v))
+    .collect())
 }
 
 /// Run `cmd` (a shell line) in a fresh isolated clone of `sha` in `repo`, with `timeout`.
@@ -465,17 +569,16 @@ pub fn check_commit_with(
     if sha.starts_with('-') {
         return Err(format!("unknown commit {sha}: not a revision"));
     }
-    let none = BTreeMap::new();
     let full = git(
         repo,
         &["rev-parse", "--verify", &format!("{sha}^{{commit}}")],
     )
     .map_err(|e| format!("unknown commit {sha}: {e}"))?;
     sweep_older_than(&temp_parent()?, STALE_AFTER);
-    let objects = objects_dir(repo)?;
+    let env = check_env(repo, &full)?;
     let wt = temp_clone(repo, &full, "referee")?;
-    let (argv, sandbox) = guarded_argv(cmd, guard, &wt.path, Some(&objects))?;
-    let out = proc::run(&argv, &wt.path, None, &none, timeout)?;
+    let (argv, sandbox) = guarded_argv(cmd, guard, &wt.path, &env)?;
+    let out = proc::run(&argv, &wt.path, None, &env, timeout)?;
     let point = out.ok();
     let mut v = json!({
         "version": VERDICT_VERSION,
@@ -615,33 +718,47 @@ fn run_fix(
     guard: &Guard,
 ) -> Result<Value, String> {
     let full = v["sha"].as_str().unwrap_or_default().to_string();
-    let objects = objects_dir(repo)?;
+    let env = check_env(repo, &full)?;
     // The clean clone first, with a .git nobody else has touched: upp's own git commands run
     // against it (the player's directory is only ever a work tree).
     let clean = temp_clone(repo, &full, "referee-verify")?;
     let wt = temp_clone(repo, &full, "referee-fix")?;
+    // Everything that comes from the caller (the check command, the protect list, the path)
+    // goes into the ball through `inert()`: the rally runner expands `{{file:..}}`,
+    // `{{search:..}}` and `{{prev.*}}` in the ball outside the sandbox.
     let protected = if protect.is_empty() {
         String::new()
     } else {
         format!(
             " Do not change these paths (a fix that touches them is rejected): {}.",
-            protect.join(", ")
+            inert(&protect.join(", "))
         )
     };
     let ball = format!(
         "This commit fails its referee check. Make the check pass by fixing the code.\n\n\
-         Working directory: {cwd}\nCheck command (run it yourself; it must exit 0): `{cmd}`\n\n\
+         Working directory: {cwd}\n\n\
+         {command}\n\n\
          {failure}\n\n\
+         The referee runs the check for you after you answer and returns its output; do NOT run \
+         the check command or the repository's scripts yourself, they are untrusted. Fix by \
+         reading and editing the code.\n\
          Rules: work only in the working directory. Do not commit, push or create branches. \
-         Do not weaken or delete tests or the check to make it pass.{protected} If the check command itself \
-         is broken (command or file not found), answer at once and say so. \
-         End with what you changed and the check output.",
-        cwd = wt.path.display(),
+         Do not weaken or delete tests or the check to make it pass.{protected} If the check \
+         command itself is broken (command or file not found), answer at once and say so. \
+         End with what you changed.",
+        cwd = inert(&wt.path.to_string_lossy()),
+        command = fenced_data(
+            "The referee's check command (for reference only; do not run it)",
+            cmd,
+            1500,
+            500
+        ),
         failure = fenced_failure(v["output"].as_str().unwrap_or_default()),
     );
     let short = &full[..12.min(full.len())];
-    // The table's referee runs the same check, confined to the player's clone.
-    let referee_run = match sandbox_prefix(guard, &wt.path, Some(&objects))? {
+    // The table's referee runs the same check, confined to the player's clone. Its `run`
+    // value is executed as given (the runner does not template-expand it).
+    let referee_run = match sandbox_prefix(guard, &wt.path, &env)? {
         Some(mut pre) => {
             pre.extend(Cmd::Line(cmd.to_string()).argv());
             json!(pre)
@@ -655,8 +772,9 @@ fn run_fix(
         "ball": ball,
         "lease": {"wall_secs": fix.wall.as_secs().max(60), "max_rallies": fix.rallies},
         "player": fix.player,
+        "private_checks": true,
         "referee": [{"name": "referee check", "kind": "command", "run": referee_run,
-                     "timeout_secs": timeout.as_secs().max(1)}],
+                     "env": env, "timeout_secs": timeout.as_secs().max(1)}],
     });
     let m = crate::config::MatchFile::from_json(spec)?;
     let db_dir = tempfile_dir(&full)?;
@@ -790,8 +908,8 @@ fn run_fix(
                 Ok(_) => match git(&cpath, &["apply", &file_s]) {
                     Err(e) => Err(format!("the patch does not apply to the commit: {e}")),
                     Ok(_) => {
-                        let (argv, _) = guarded_argv(cmd, guard, &cpath, Some(&objects))?;
-                        let run = proc::run(&argv, &cpath, None, &BTreeMap::new(), timeout)?;
+                        let (argv, _) = guarded_argv(cmd, guard, &cpath, &env)?;
+                        let run = proc::run(&argv, &cpath, None, &env, timeout)?;
                         if run.ok() {
                             Ok(())
                         } else {
@@ -835,7 +953,10 @@ mod tests {
     use std::process::Command;
 
     fn repo() -> tempfile::TempDir {
-        let d = tempfile::tempdir().unwrap();
+        repo_at(tempfile::tempdir().unwrap())
+    }
+
+    fn repo_at(d: tempfile::TempDir) -> tempfile::TempDir {
         let git = |args: &[&str]| {
             assert!(Command::new("git")
                 .args(args)
@@ -1584,5 +1705,264 @@ mod tests {
         std::thread::sleep(Duration::from_millis(20));
         sweep_older_than(&p, Duration::from_millis(1));
         assert!(!p.join("old").exists());
+    }
+
+    // ---- third review: template injection, history, cleanup, size limits, masks ----
+
+    fn player_saving_stdin(save: &Path) -> String {
+        format!("cat > {}; printf '9\\n' > v.txt; echo done", save.display())
+    }
+
+    // H1
+    #[test]
+    fn a_check_command_cannot_inject_templates_into_the_ball() {
+        let d = repo();
+        let patches = tempfile::tempdir().unwrap();
+        let aux = tempfile::tempdir().unwrap();
+        let canary = aux.path().join("canary.txt");
+        std::fs::write(&canary, "CANARY-CONTENT-5d1e\n").unwrap();
+        let save = aux.path().join("stdin.txt");
+        let opts = fix_opts(&player_saving_stdin(&save), 1, patches.path());
+        let cmd = format!(
+            "grep -qx 9 v.txt # {{{{file:{}}}}} {{{{search:x}}}} {{{{prev.answer}}}}",
+            canary.display()
+        );
+        let mut opts = opts;
+        opts.protect = vec![format!("p{{{{file:{}}}}}", canary.display())];
+        let v = check_and_fix(
+            d.path(),
+            "HEAD",
+            &cmd,
+            Duration::from_secs(20),
+            Some(&opts),
+            &Guard::default(),
+        )
+        .unwrap();
+        let got = std::fs::read_to_string(&save).unwrap();
+        assert!(
+            !got.contains("CANARY-CONTENT-5d1e"),
+            "template expanded: {got}"
+        );
+        assert!(!got.contains("(cannot read"), "template expanded: {got}");
+        assert!(!got.contains("{{"), "{got}");
+        assert!(
+            got.contains("{ {file:"),
+            "the command is still shown: {got}"
+        );
+        assert_eq!(v["fix"]["point"], true, "{v}");
+    }
+
+    // H2
+    #[test]
+    fn the_brief_tells_the_player_not_to_run_the_check_and_shows_the_command_once_fenced() {
+        let d = repo();
+        let patches = tempfile::tempdir().unwrap();
+        let aux = tempfile::tempdir().unwrap();
+        let save = aux.path().join("stdin.txt");
+        let opts = fix_opts(&player_saving_stdin(&save), 1, patches.path());
+        check_and_fix(
+            d.path(),
+            "HEAD",
+            "grep -qx 9 v.txt # UNIQUECMDMARK",
+            Duration::from_secs(20),
+            Some(&opts),
+            &Guard::default(),
+        )
+        .unwrap();
+        let got = std::fs::read_to_string(&save).unwrap();
+        assert!(got.contains("do NOT run the check command"), "{got}");
+        assert!(!got.contains("run it yourself"), "{got}");
+        assert_eq!(got.matches("UNIQUECMDMARK").count(), 1, "{got}");
+        assert!(!got.contains("`grep -qx 9"), "no inline backticks: {got}");
+        let at = got.find("UNIQUECMDMARK").unwrap();
+        let begin = got[..at].rfind("----- BEGIN UNTRUSTED-").unwrap();
+        let end = got[at..].find("----- END UNTRUSTED-").unwrap();
+        assert!(
+            begin < at && end > 0,
+            "the command sits inside a fence: {got}"
+        );
+    }
+
+    // M2
+    #[test]
+    fn a_sandboxed_check_sees_only_its_commit_and_no_other_objects() {
+        if skip() {
+            return;
+        }
+        let parent = tempfile::tempdir().unwrap();
+        let spaced = tempfile::Builder::new()
+            .prefix("a repo with spaces ")
+            .tempdir_in(parent.path())
+            .unwrap();
+        let d = repo_at(spaced);
+        let blob = Command::new("git")
+            .args(["hash-object", "-w", "--stdin"])
+            .current_dir(d.path())
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .and_then(|mut c| {
+                use std::io::Write;
+                c.stdin
+                    .take()
+                    .unwrap()
+                    .write_all(b"UNREFERENCED-BLOB-MARKER\n")?;
+                c.wait_with_output()
+            })
+            .unwrap();
+        let blob = String::from_utf8(blob.stdout).unwrap().trim().to_string();
+        git_in(d.path(), &["checkout", "-qb", "other"]);
+        std::fs::write(d.path().join("other.txt"), "OTHER-BRANCH-MARKER\n").unwrap();
+        git_in(d.path(), &["add", "-A"]);
+        git_in(d.path(), &["commit", "-qm", "other"]);
+        git_in(d.path(), &["checkout", "-q", "-"]);
+        let cmd = format!(
+            "test \"$(git cat-file --batch-all-objects --batch-check | wc -l)\" -le 6 \
+             && ! git cat-file --batch-all-objects --batch | grep -q -e UNREFERENCED-BLOB-MARKER -e OTHER-BRANCH-MARKER \
+             && ! git cat-file -e {blob} 2>/dev/null \
+             && test \"$(git log --oneline | wc -l)\" = 2 && grep -qx 2 v.txt"
+        );
+        let v = check_commit_with(d.path(), "HEAD", &cmd, Duration::from_secs(30), &bw()).unwrap();
+        assert_eq!(v["point"], true, "{v}");
+        // A commit that is not a branch tip works too (and the path has spaces).
+        let v = check_commit_with(
+            d.path(),
+            "HEAD~1",
+            "grep -qx 1 v.txt && test \"$(git log --oneline | wc -l)\" = 1",
+            Duration::from_secs(30),
+            &bw(),
+        )
+        .unwrap();
+        assert_eq!(v["point"], true, "{v}");
+    }
+
+    #[test]
+    fn the_check_sees_head_parent_and_the_upp_variables() {
+        let d = repo();
+        let head = crate::git::git(d.path(), &["rev-parse", "HEAD"], &BTreeMap::new()).unwrap();
+        let base = crate::git::git(d.path(), &["rev-parse", "HEAD^"], &BTreeMap::new()).unwrap();
+        let cmd = format!(
+            "test \"$UPP_SHA\" = {head} && test \"$UPP_BASE_SHA\" = {base} \
+             && test \"$UPP_CHANGED_PATHS\" = v.txt \
+             && test \"$(git diff --name-only HEAD^ HEAD)\" = v.txt \
+             && test \"$(git rev-parse HEAD^)\" = {base}"
+        );
+        for g in [
+            bw(),
+            Guard {
+                sandbox: SandboxMode::Off,
+                ..Default::default()
+            },
+        ] {
+            if g.sandbox == SandboxMode::Bwrap && !bwrap_works() {
+                continue;
+            }
+            let v = check_commit_with(d.path(), "HEAD", &cmd, Duration::from_secs(30), &g).unwrap();
+            assert_eq!(v["point"], true, "{v}");
+        }
+        // A root commit has no base: empty variable, all its files.
+        let v = check_commit_with(
+            d.path(),
+            "HEAD~1",
+            "test -z \"$UPP_BASE_SHA\" && test \"$UPP_CHANGED_PATHS\" = v.txt && ! git rev-parse -q --verify HEAD^",
+            Duration::from_secs(30),
+            &Guard::default(),
+        )
+        .unwrap();
+        assert_eq!(v["point"], true, "{v}");
+        // The fix table's referee run gets them too.
+        let patches = tempfile::tempdir().unwrap();
+        let opts = fix_opts("printf '9\\n' > v.txt; echo done", 1, patches.path());
+        let v = check_and_fix(
+            d.path(),
+            "HEAD",
+            "test \"$UPP_CHANGED_PATHS\" = v.txt && grep -qx 9 v.txt",
+            Duration::from_secs(20),
+            Some(&opts),
+            &Guard::default(),
+        )
+        .unwrap();
+        assert_eq!(v["fix"]["verified"], true, "{v}");
+    }
+
+    // L1
+    #[test]
+    fn a_check_that_chmods_its_tree_unreadable_leaves_nothing_behind() {
+        let d = repo();
+        for g in [
+            Guard {
+                sandbox: SandboxMode::Off,
+                ..Default::default()
+            },
+            Guard::default(),
+        ] {
+            let v = check_commit_with(
+                d.path(),
+                "HEAD",
+                "pwd -P; mkdir -p d/e; echo x > d/e/f; chmod 000 d; exit 1",
+                Duration::from_secs(20),
+                &g,
+            )
+            .unwrap();
+            assert_eq!(v["point"], false);
+            let path = v["output"].as_str().unwrap().lines().next().unwrap();
+            assert!(path.contains("referee-"), "{v}");
+            assert!(!Path::new(path).exists(), "left behind: {path}");
+        }
+        // The stale sweep copes with the same tree.
+        let base = tempfile::tempdir().unwrap();
+        let p = temp_parent_in(base.path()).unwrap();
+        std::fs::create_dir_all(p.join("old/d/e")).unwrap();
+        std::fs::write(p.join("old/d/e/f"), "x").unwrap();
+        std::os::unix::fs::symlink("/nonexistent", p.join("old/link")).unwrap();
+        std::fs::set_permissions(p.join("old/d"), std::fs::Permissions::from_mode(0o000)).unwrap();
+        std::thread::sleep(Duration::from_millis(20));
+        sweep_older_than(&p, Duration::from_millis(1));
+        assert!(!p.join("old").exists());
+    }
+
+    // L3
+    #[test]
+    fn the_sandbox_tmpfs_mounts_have_a_size_limit() {
+        if skip() {
+            return;
+        }
+        let d = repo();
+        let v = check_commit_with(
+            d.path(),
+            "HEAD",
+            "! dd if=/dev/zero of=$HOME/big bs=1M count=400 2>/dev/null && ! dd if=/dev/zero of=/run/big bs=1M count=100 2>/dev/null",
+            Duration::from_secs(60),
+            &bw(),
+        )
+        .unwrap();
+        assert_eq!(v["point"], true, "{v}");
+    }
+
+    // L4
+    #[test]
+    fn credential_masking_covers_tokens_cargo_config_and_git_credentials() {
+        let root = tempfile::tempdir().unwrap();
+        let w = |rel: &str| {
+            let p = root.path().join(rel);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(&p, "x").unwrap();
+            p
+        };
+        let a = w("a/.git-credentials");
+        let b = w("a/api_TOKEN.json");
+        let c = w("a/.cargo/config.toml");
+        let plain = w("a/config.toml");
+        let other = w("a/sub/config.toml");
+        let direct = w(".cargo/config.toml");
+        let got: BTreeSet<PathBuf> = secret_files(&root.path().join("a")).into_iter().collect();
+        assert!(
+            got.contains(&a) && got.contains(&b) && got.contains(&c),
+            "{got:?}"
+        );
+        assert!(!got.contains(&plain) && !got.contains(&other), "{got:?}");
+        // The toolchain dir itself is `.cargo`.
+        let got = secret_files(&root.path().join(".cargo"));
+        assert_eq!(got, vec![direct]);
     }
 }

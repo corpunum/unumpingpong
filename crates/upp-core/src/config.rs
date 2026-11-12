@@ -501,6 +501,10 @@ pub struct TableSpec {
     /// and the point is recorded as unverified. Without it, a table needs at least one check.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub unverified: bool,
+    /// Do not list the referee checks (commands) in the first ball: the player is told
+    /// only that a referee runs after its answer. For checks whose command is untrusted.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub private_checks: bool,
     /// Ask the player for a result card (`<card>` tail block). Default true.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub card: Option<bool>,

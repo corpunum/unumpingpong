@@ -112,6 +112,12 @@ fn describe_checks(spec: &TableSpec) -> String {
     if spec.referee.is_empty() {
         return s + &card_note;
     }
+    if spec.private_checks {
+        return s
+            + "\n\n---\nAn external referee runs its check after you answer and returns the output. \
+               Answer when you believe the problem is fixed. Say briefly what you changed."
+            + &card_note;
+    }
     s.push_str("\n\n---\nAn external referee will check your work:\n");
     for c in &spec.referee {
         let line = match &c.check {
