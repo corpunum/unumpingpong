@@ -175,12 +175,12 @@ fn return_message(
         for c in failed {
             s.push_str(&format!(
                 "- [FAIL] {}: {}\n",
-                crate::commit_check::inert(&c.name),
-                crate::commit_check::inert(&c.summary)
+                proc::inert(&c.name),
+                proc::inert(&c.summary)
             ));
             let out = c.output.trim();
             if !out.is_empty() {
-                s.push_str(&crate::commit_check::fenced_data(
+                s.push_str(&proc::fenced_data(
                     "Output of this check",
                     out,
                     RETURN_HEAD,

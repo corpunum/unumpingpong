@@ -4,8 +4,9 @@ Update this file with every change that alters state, open work or how to ship. 
 
 ## State (2026-11-12)
 
-- Released: **v0.6.0** (2026-11-12; tagged with `unumship release --repo unumpingpong --tag v0.6.0`
-  on the shipped-green head; `release.yml` builds the binaries). Previous: v0.5.0 on 11eafa9.
+- Released: **v0.6.1** (2026-11-12; the v0.6.0 tag exists but has no binaries: macOS/Windows build
+  broke). Tag with `unumship release --repo unumpingpong --tag vX.Y.Z` on the shipped-green head;
+  `release.yml` builds the binaries. Previous good release: v0.5.0 on 11eafa9.
   `upp referee --fix` is in v0.6.0 but held: no automatic use until the fix player runs sandboxed
   (OpenUnum per-worker sandbox, hub U-4b3a6f59) and a narrow 4th review passes.
 - Workspace: `crates/upp-core` (library), `crates/upp` (CLI + TUI + MCP), `crates/uppd` (daemon,
@@ -59,7 +60,9 @@ Update this file with every change that alters state, open work or how to ship. 
 
 ## How to ship
 
-1. Detached worktree of `origin/main`, change, then the gates:
+1. Before a release tag run `cargo check --locked --target x86_64-apple-darwin --bin upp --bin uppd`
+   and the same for `x86_64-pc-windows-msvc` (CI only builds Linux; cross C deps need a C cross
+   compiler or a stub `CC`/`AR`). Detached worktree of `origin/main`, change, then the gates:
    `cargo fmt --all -- --check && cargo clippy --all-targets --locked -- -D warnings && cargo test --all-targets --locked`
    and `for f in examples/*.toml examples/demo/*.toml; do cargo run -q --bin upp -- validate "$f"; done`.
 2. One push to `main`; wait for CI to end green.

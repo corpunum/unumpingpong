@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.6.1 (2026-11-12) - Release build fix
+
+- v0.6.0's release binaries did not build on macOS and Windows (Linux-only `O_PATH`, unconditional
+  unix imports); v0.6.1 builds them. `upp referee` is Unix-only (sandboxed checks need Linux with
+  bubblewrap).
+
 ## v0.6.0 (2026-11-12) - Commit referee, sandboxed checks, observation roots
 
 Highlights: `upp referee` checks a commit in an isolated clone under bubblewrap and prints a JSON

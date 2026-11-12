@@ -315,6 +315,7 @@ referee = [{{ kind = "command", run = "grep -qx 42 answer.txt" }}]
 fn script(dir: &Path, name: &str, body: &str) -> String {
     let p = dir.join(name);
     std::fs::write(&p, body).unwrap();
+    #[cfg(unix)]
     std::fs::set_permissions(&p, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
     p.to_string_lossy().into_owned()
 }

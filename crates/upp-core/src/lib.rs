@@ -11,6 +11,7 @@
 pub mod api;
 pub mod automerge;
 pub mod card;
+#[cfg(unix)]
 pub mod commit_check;
 pub mod compat;
 pub mod config;

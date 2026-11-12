@@ -255,6 +255,12 @@ fn parse_args() -> Result<Args, String> {
 
 /// `upp referee`: run a check command against a commit (isolated clone), print the
 /// JSON verdict, exit 0 on a point, 1 without one. Errors (no repo, unknown commit) exit 2.
+#[cfg(not(unix))]
+fn cmd_referee(_a: &Args) -> Result<(), String> {
+    Err("upp referee is only supported on Unix (Linux for sandboxed checks)".into())
+}
+
+#[cfg(unix)]
 fn cmd_referee(a: &Args) -> Result<(), String> {
     // One word after `--` is a shell line (as before); several are an argv: quote each.
     let cmd = if a.pos.len() == 1 {
