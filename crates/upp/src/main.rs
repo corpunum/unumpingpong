@@ -41,6 +41,12 @@ COMMANDS:
                             Run a check command against a commit in a temp detached
                             worktree (no model); print the JSON verdict; exit 0 = point,
                             1 = no point, 2 = could not run. For ship pipelines.
+      --sandbox auto|bwrap|none
+                              Confine the check with bubblewrap: system read-only, writes
+                              only in the checkout, private /tmp, credentials in $HOME
+                              masked, no network. auto (default) = when bwrap works here;
+                              the verdict's `sandbox` says what ran
+      --net                   Allow network inside the sandbox
       --fix N                 On a failed check, give a player at most N (≤5) rallies in a
                               separate temp worktree; a scoring fix is saved as a patch
                               (~/.local/share/unumpingpong/fixes), never committed. The
@@ -112,6 +118,8 @@ struct Args {
     player: Option<String>,
     patch_dir: Option<PathBuf>,
     protect: Vec<String>,
+    sandbox: Option<String>,
+    net: bool,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -180,7 +188,7 @@ fn parse_args() -> Result<Args, String> {
             }
             Long(
                 k @ ("next" | "parent" | "into" | "check" | "table" | "repo" | "sha" | "player"
-                | "protect"),
+                | "protect" | "sandbox"),
             ) => {
                 let k = k.to_string();
                 let v = p
@@ -197,12 +205,14 @@ fn parse_args() -> Result<Args, String> {
                     "sha" => a.sha = Some(v),
                     "player" => a.player = Some(v),
                     "protect" => a.protect.push(v),
+                    "sandbox" => a.sandbox = Some(v),
                     _ => a.tables.push(v),
                 }
             }
             Long("watch") | Short('w') => a.watch = true,
             Long("exit-when-done") => a.exit_when_done = true,
             Long("json") => a.json = true,
+            Long("net") => a.net = true,
             Long("all") | Short('a') => a.all = true,
             Long("full") => a.full = true,
             Long("queue-only") => a.queue_only = true,
@@ -270,7 +280,22 @@ fn cmd_referee(a: &Args) -> Result<(), String> {
         }
         _ => None,
     };
-    let v = upp_core::commit_check::check_and_fix(&repo, &sha, &cmd, timeout, fix.as_ref())?;
+    use upp_core::commit_check::{Guard, SandboxMode};
+    let guard = Guard {
+        sandbox: match a.sandbox.as_deref() {
+            None | Some("auto") => SandboxMode::Auto,
+            Some("bwrap") => SandboxMode::Bwrap,
+            Some("none") => SandboxMode::Off,
+            Some(o) => {
+                return Err(format!(
+                    "--sandbox: expected auto, bwrap or none, got {o:?}"
+                ))
+            }
+        },
+        net: a.net,
+    };
+    let v =
+        upp_core::commit_check::check_and_fix(&repo, &sha, &cmd, timeout, fix.as_ref(), &guard)?;
     if a.json {
         println!("{v}");
     } else {

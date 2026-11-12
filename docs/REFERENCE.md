@@ -232,8 +232,14 @@ change: a fix is a proposal, not a pass.
 What a fix must survive: the player works in an isolated clone (own `.git`), the patch is the diff
 against the commit, and `fix.point` is true only when that patch passes the check on a clean
 checkout (`fix.verified`) and touches no `--protect PATH` (name the tests and the check script).
-`fix.files` lists what it changes. There is no sandbox: player and check run as the calling user,
-so review the patch before applying it.
+`fix.files` lists what it changes. Review the patch before applying it.
+
+Checks are confined with bubblewrap by default (`--sandbox auto`; `bwrap` = required, `none` =
+off): read-only system, writes only in the checkout, private `/tmp`, masked credentials
+(`~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.config/gh`, `~/.netrc`, ... ), no network unless `--net`.
+The verdict's `sandbox` field says what actually ran (`none` on hosts where unprivileged user
+namespaces are refused). A check that needs to download or to write outside its checkout fails
+there: pass `--net`, or make the check hermetic. The fix player itself is not confined by `upp`.
 
 ## Server modes
 

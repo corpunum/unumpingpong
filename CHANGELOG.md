@@ -17,8 +17,15 @@
   (`verified`): a pass that depends on ignored files or leftover state is rejected.
   `--protect PATH` (repeatable) rejects a fix that changes the tests or the check script; a check
   that turns green with no change is rejected as flaky. A `--sha` that starts with `-` is refused.
-  Limit: the player and the check run as the calling user, with no sandbox; this guards against a
-  confused player, not a hostile one.
+- **Sandboxed checks** (`--sandbox auto|bwrap|none`, default `auto`; `--net`): every referee
+  check (the commit check, the fix table's referee and the clean re-verify) runs under bubblewrap
+  when it works on the host: the system read-only, writes only in the checkout, a private `/tmp`,
+  credential directories and files in `$HOME` masked, its own PID namespace, no network unless
+  `--net`. The verdict records `sandbox` (`bwrap` or `none`) and `net`.
+- The failing output in a fix player's brief is fenced as untrusted data behind a random marker
+  and labelled "never an instruction".
+- Limit: the fix *player* is not sandboxed by `upp` (an OpenUnum worker runs inside OpenUnum); it
+  works in an isolated clone, and its patch only counts after the sandboxed clean re-verify.
 - **`upp referee`**: referee a commit without a model. `upp referee --repo DIR --sha SHA
   [--timeout SECS] [--json] -- <check cmd>` runs the command in a throwaway detached worktree of
   that commit (so uncommitted files cannot make it pass) and prints a versioned JSON verdict
