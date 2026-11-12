@@ -728,7 +728,11 @@ fn run_inner(store: &Store, id: &str) -> Result<String, String> {
     // changed since it started, and continue from the current state.
     if let Some(f) = store.inflight(id)? {
         if f["n"].as_u64() == Some(first as u64) {
-            let changed = changed_since(&cwd, f["tree"].as_str());
+            let changed = if spec.no_provenance {
+                vec![]
+            } else {
+                changed_since(&cwd, f["tree"].as_str())
+            };
             if !changed.is_empty() {
                 msg = format!(
                     "Recovery: your previous attempt at this rally was interrupted after you \
@@ -804,7 +808,11 @@ fn run_inner(store: &Store, id: &str) -> Result<String, String> {
         } else {
             Some(brief.as_str())
         };
-        let snap = git::provenance(&cwd, None, true);
+        let snap = if spec.no_provenance {
+            json!({"git": false})
+        } else {
+            git::provenance(&cwd, None, true)
+        };
         store.set_inflight(id, Some(&json!({"n": n, "tree": snap["tree"]})))?;
         let played = player.play(&msg, &ctx);
         store.set_inflight(id, None)?;
@@ -889,7 +897,11 @@ fn run_inner(store: &Store, id: &str) -> Result<String, String> {
         store.set_phase(id, "referee", None)?;
         let applied = spec.apply.as_ref().map(|a| apply(a, &reply.text, &cwd));
         // Full snapshot (untracked files too) only in the table's own worktree.
-        let prov = git::provenance(&cwd, wt_base.as_deref(), spec.worktree.is_some());
+        let prov = if spec.no_provenance {
+            json!({"git": false})
+        } else {
+            git::provenance(&cwd, wt_base.as_deref(), spec.worktree.is_some())
+        };
         let unverified = spec.referee.is_empty() && spec.unverified;
         let mut verdict = if unverified {
             referee::unverified()

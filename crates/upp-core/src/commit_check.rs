@@ -833,6 +833,7 @@ fn run_fix(
         "lease": {"wall_secs": fix.wall.as_secs().max(60), "max_rallies": fix.rallies},
         "player": fix.player,
         "private_checks": true,
+        "no_provenance": true,
         "referee": [{"name": "referee check", "kind": "command", "run": referee_run,
                      "env": env, "timeout_secs": timeout.as_secs().max(1)}],
     });
@@ -2209,6 +2210,38 @@ mod tests {
             .unwrap();
             assert_eq!(v["fix"]["point"], true, "{v}");
             assert!(!marker.exists(), "a planted clean filter ran in upp's git");
+        }
+    }
+
+    #[test]
+    fn a_player_cannot_get_a_filter_run_by_the_table_engines_provenance_git() {
+        let d = repo();
+        let patches = tempfile::tempdir().unwrap();
+        let marks = tempfile::tempdir().unwrap();
+        let marker = marks.path().join("filter-ran");
+        let m = marker.display();
+        // The player plants the filter in ITS OWN clone's .git/config (the clone is its
+        // working directory) and selects it for every file, then makes a real fix.
+        let player = format!(
+            "git config filter.pwn.clean 'touch {m}'; printf '* filter=pwn\n' > .gitattributes; \
+             printf '9\n' > v.txt; echo done"
+        );
+        for g in [off(), Guard::default()] {
+            let opts = fix_opts(&player, 1, patches.path());
+            let v = check_and_fix(
+                d.path(),
+                "HEAD",
+                "grep -qx 9 v.txt",
+                Duration::from_secs(20),
+                Some(&opts),
+                &g,
+            )
+            .unwrap();
+            assert_eq!(v["fix"]["point"], true, "{v}");
+            assert!(
+                !marker.exists(),
+                "a filter planted in the player's clone ran in the table engine's git"
+            );
         }
     }
 

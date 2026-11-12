@@ -46,9 +46,12 @@ Update this file with every change that alters state, open work or how to ship. 
   only its own work dir is still required and does not exist yet). A fourth review of these fixes
   is pending.
 - Automatic fix runs in the ship queue stay disabled until the per-worker sandbox exists.
-- Known gap: the table engine's own git (`git::provenance`, `git add -A` in the player's
-  directory) uses the player's clone config, so a `filter.*.clean` planted by an unsandboxed
-  player in its own clone runs there. Fixed only by sandboxing the player.
+- Closed for referee fix tables: the table engine's provenance git (`git::provenance`, `git add
+  -A` in the player's directory, which uses the player's `.git/config`) no longer runs for them.
+  `upp referee --fix` sets the table option `no_provenance`, so no git runs in the player's clone
+  and provenance is `{"git": false}`; sub-tables inherit it. Ordinary tables still run provenance
+  git in the player's directory with the player's git config (documented limit: run players
+  sandboxed with a read-only `.git`, or set `no_provenance`).
 - Verdict text (`fix.files`, `diffstat`, `reason`, `output`) is untrusted: fence it before a
   model reads it. Credential masking is a name heuristic to depth 2.
 

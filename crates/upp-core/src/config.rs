@@ -505,6 +505,11 @@ pub struct TableSpec {
     /// only that a referee runs after its answer. For checks whose command is untrusted.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub private_checks: bool,
+    /// Never run git in this table's cwd (no provenance snapshots, no dirty checks, no recovery
+    /// diff): the cwd's `.git/config` may be the player's. The point records `{"git": false}`.
+    /// Not allowed together with `worktree`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub no_provenance: bool,
     /// Ask the player for a result card (`<card>` tail block). Default true.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub card: Option<bool>,
@@ -817,6 +822,12 @@ pub fn validate_table(t: &TableSpec) -> Result<(), String> {
             }
             _ => {}
         }
+    }
+    if t.no_provenance && t.worktree.is_some() {
+        return Err(format!(
+            "table '{}': no_provenance cannot be combined with worktree (a worktree needs git)",
+            t.name
+        ));
     }
     if t.auto_merge.is_some() && (t.unverified || t.referee.is_empty()) {
         return Err(format!(

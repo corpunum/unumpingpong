@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- New table option `no_provenance` (default false): the runner runs no git in the table's
+  directory (no provenance snapshots, no recovery diff) and records provenance as
+  `{"git": false}`; sub-tables inherit it; not allowed with `worktree`. `upp referee --fix` sets it
+  on its fix table, closing a sandbox escape where a filter planted in the player's clone's
+  `.git/config` was run by upp's own provenance `git add -A`. Ordinary tables still run
+  provenance git with the player's git config.
 - Fourth security review fixes (fix flow). The clean verify clone is created only after the fix
   table has ended, its git config is compared with what `git init` + fetch wrote (a difference
   fails the fix with "verify clone was modified"), and every upp git call sets

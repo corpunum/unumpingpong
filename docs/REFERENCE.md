@@ -460,6 +460,7 @@ worktree = { repo = "..", base = "main", branch = "upp/fix", path = "/tmp/wt/fix
 merge_children = true      # merge scored writer sub-tables into this worktree first (default true)
 auto_merge = { repo = "..", target = "main", test = "cargo test", push = true, remote = "origin" }  # see Auto-merge
 unverified = false         # true only for a table with no referee checks (its point is marked UNVERIFIED)
+no_provenance = false       # true: run no git in the cwd (provenance is {"git": false}); not with worktree; sub-tables inherit
 player = { kind = "claude", model = "sonnet", args = [], timeout_secs = 900, resume = true, env = {}, persistent = true, lean = true }
 # claude/codex also: tools = ["Read", "Edit"] ([] = none), system_prompt = "replaces the CLI's own"
 # openai: { kind = "openai", base_url, model, api_key_env, system, temperature, max_tokens, reasoning_effort, halogen_keep, extra }
