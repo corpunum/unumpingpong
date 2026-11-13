@@ -3,8 +3,8 @@
   "repo": "corpunum/unumpingpong",
   "oneLiner": "AI agents play ping-pong with your tasks and a referee that runs the real tests decides who scores.",
   "license": "Apache-2.0",
-  "version": "v0.5.0",
-  "updated": "2026-11-12",
+  "version": "v0.6.0",
+  "updated": "2026-11-13",
   "quickstart": {
     "lang": "bash",
     "code": "curl -fsSL https://github.com/corpunum/unumpingpong/releases/latest/download/install.sh | sh\nupp --db /tmp/upp-demo.db run examples/demo/demo.toml --watch   # no model needed: scripted players, real referee"
