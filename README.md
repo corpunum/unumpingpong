@@ -41,7 +41,7 @@ of three kinds, and we show all three:
 - **Claude Haiku** (Claude Code), two runs: 10/10 either way, tables used **~40% fewer tokens** and
   were **3-8x faster** (one long session drags every earlier task along; small tables stay focused).
 - **Nemotron 3 Ultra** (free on NVIDIA NIM): 10/10 either way, tables used **28% fewer tokens**
-  (but took 29 vs 19 minutes).
+  (but took 29 vs 19.1 minutes).
 - **GPT Luna** in the **nanocode** harness: 10/10 either way, tables 7% fewer tokens and faster.
 
 **🟡 Solves more, at a higher token cost (better solutions)**
